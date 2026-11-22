@@ -134,6 +134,12 @@ export async function removeFriendship(id) {
   save(d)
 }
 
+export function subscribeFriendships(myId, cb) {
+  const onStorage = (e) => e.key === KEY && cb()
+  window.addEventListener('storage', onStorage)
+  return () => window.removeEventListener('storage', onStorage)
+}
+
 // ---------- Partidas online (el "servidor" corre acá mismo) ----------
 function persist(d, room) {
   d.rooms[room.id] = room

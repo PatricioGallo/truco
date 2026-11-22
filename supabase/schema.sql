@@ -110,3 +110,14 @@ $$;
 
 revoke execute on function public.truco_save(uuid, text, uuid, text, jsonb, integer, integer, jsonb) from public, anon, authenticated;
 grant execute on function public.truco_save(uuid, text, uuid, text, jsonb, integer, integer, jsonb) to service_role;
+
+-- Avisos en tiempo real de pedidos de amistad (respeta las reglas de lectura de arriba)
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'friendships'
+  ) then
+    alter publication supabase_realtime add table public.friendships;
+  end if;
+end $$;

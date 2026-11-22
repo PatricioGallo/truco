@@ -117,6 +117,16 @@ export async function removeFriendship(friendshipId) {
   check(await sb.from('friendships').delete().eq('id', friendshipId))
 }
 
+/** Avisa cuando cambia algún pedido de amistad mío (recibido o enviado). */
+export function subscribeFriendships(myId, cb) {
+  const channel = sb
+    .channel(`friendships-${myId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships', filter: `addressee=eq.${myId}` }, cb)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'friendships', filter: `requester=eq.${myId}` }, cb)
+    .subscribe()
+  return () => sb.removeChannel(channel)
+}
+
 // ---------- Partidas online ----------
 async function server(op, payload = {}) {
   // Se ejecuta en la misma región que la base de datos: cada jugada hace menos viajes largos

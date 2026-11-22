@@ -9,6 +9,7 @@ import Friends from './components/Friends.jsx'
 import NewOnline from './components/NewOnline.jsx'
 import OnlineRoom from './components/OnlineRoom.jsx'
 import Avatar from './components/Avatar.jsx'
+import { useNotifications, Toast, Bell } from './components/Notifications.jsx'
 
 const LOCAL_NAMES = { 2: ['Vos', 'La compu'], 4: ['Vos', 'Compu 1', 'Compañero', 'Compu 2'] }
 const PROFILE_KEY = 'truco.profile'
@@ -76,8 +77,12 @@ function Main({ profile, setProfile }) {
   useEffect(() => {
     reloadFriends()
     const t = setInterval(reloadFriends, 20000)
-    return () => clearInterval(t)
-  }, [reloadFriends])
+    const unsub = api.subscribeFriendships(profile.id, () => reloadFriends())
+    return () => {
+      clearInterval(t)
+      unsub()
+    }
+  }, [reloadFriends, profile.id])
 
   // Partidas online: lista inicial + cambios en tiempo real
   const [rooms, setRooms] = useState({})
@@ -106,6 +111,20 @@ function Main({ profile, setProfile }) {
       api.profilesByIds(missing).then((ps) => setPeople((p) => ({ ...p, ...Object.fromEntries(ps.map((x) => [x.id, x])) })))
   }, [roomUserIds]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Notificaciones (aviso arriba + campanita)
+  const notif = useNotifications({ profile, friends, rooms: Object.values(rooms), people })
+  const notifHandlers = {
+    onAcceptFriend: (id) => api.acceptFriend(id).then(reloadFriends).catch(() => {}),
+    onRejectFriend: (id) => api.removeFriendship(id).then(reloadFriends).catch(() => {}),
+    onOpenRoom: (id) => go('room', { roomId: id }),
+  }
+  const withToast = (node) => (
+    <>
+      {node}
+      <Toast notif={notif} {...notifHandlers} />
+    </>
+  )
+
   const openRoom = (view) => {
     setRooms((r) => ({ ...r, [view.id]: view }))
     go('room', { roomId: view.id })
@@ -114,7 +133,7 @@ function Main({ profile, setProfile }) {
   // ----- Pantallas -----
   if (screen.name === 'local' && local.match) {
     const n = local.match.config.players
-    return (
+    return withToast(
       <div className="screen">
         <Table
           view={local.view}
@@ -134,7 +153,7 @@ function Main({ profile, setProfile }) {
   }
 
   if (screen.name === 'room' && rooms[screen.roomId]) {
-    return (
+    return withToast(
       <div className="screen">
         <OnlineRoom
           room={rooms[screen.roomId]}
@@ -148,7 +167,7 @@ function Main({ profile, setProfile }) {
   }
 
   if (screen.name === 'friends') {
-    return (
+    return withToast(
       <div className="screen">
         <Friends
           profile={profile}
@@ -162,7 +181,7 @@ function Main({ profile, setProfile }) {
   }
 
   if (screen.name === 'new') {
-    return (
+    return withToast(
       <div className="screen">
         <NewOnline
           friends={friends.friends}
@@ -175,14 +194,14 @@ function Main({ profile, setProfile }) {
   }
 
   if (screen.name === 'profile') {
-    return (
+    return withToast(
       <div className="screen">
         <Profile profile={profile} onChange={setProfile} onBack={() => go('home')} />
       </div>
     )
   }
 
-  return (
+  return withToast(
     <div className="screen">
       <Home
         profile={profile}
@@ -199,12 +218,14 @@ function Main({ profile, setProfile }) {
         onOpenRoom={(id) => go('room', { roomId: id })}
         onJoinCode={async (code) => openRoom(await api.joinRoom({ code }))}
         people={people}
+        notif={notif}
+        notifHandlers={notifHandlers}
       />
     </div>
   )
 }
 
-function Home({ profile, friends, rooms, local, flor, setFlor, onLocal, onResumeLocal, onFriends, onNew, onProfile, onOpenRoom, onJoinCode, people }) {
+function Home({ profile, friends, rooms, local, flor, setFlor, onLocal, onResumeLocal, onFriends, onNew, onProfile, onOpenRoom, onJoinCode, people, notif, notifHandlers }) {
   const [code, setCode] = useState('')
   const [codeError, setCodeError] = useState('')
   const invites = rooms.filter((r) => r.status === 'waiting' && r.seats[r.mySeat]?.type === 'user' && !r.seats[r.mySeat].joined)
@@ -220,9 +241,12 @@ function Home({ profile, friends, rooms, local, flor, setFlor, onLocal, onResume
     <main className="home">
       <header className="home-top">
         <h1 className="title title-small">Truco</h1>
-        <button className="me" onClick={onProfile} aria-label="Mi perfil">
-          <Avatar profile={profile} size={40} />
-        </button>
+        <span className="top-actions">
+          <Bell notif={notif} {...notifHandlers} />
+          <button className="me" onClick={onProfile} aria-label="Mi perfil">
+            <Avatar profile={profile} size={40} />
+          </button>
+        </span>
       </header>
       <p className="greeting">Hola, {profile.first_name || profile.username}. ¿Una mano?</p>
 
