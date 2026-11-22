@@ -1,4 +1,4 @@
-import { teamOf } from '../engine/game.js'
+import { teamOf, TRUCO_NAMES } from '../engine/game.js'
 import Card from './Card.jsx'
 import Fosforos from './Fosforos.jsx'
 import { BUTTON_TEXT, CALL_TEXT, REASON_TEXT } from '../texts.js'
@@ -16,11 +16,11 @@ function pendingText(h, names) {
   const p = h.pending
   if (!p) return null
   const who = names[p.bySeat]
-  const what = CALL_TEXT[p.call] ?? p.call
+  const what = CALL_TEXT[p.kind === 'truco' ? TRUCO_NAMES[p.call] : p.call] ?? p.call
   return `${who}: ${what}`
 }
 
-export default function Table({ view, me, actions, names, bubbles, onAct, onNextHand, onRestart, onQuit }) {
+export default function Table({ view, me, actions, names, bubbles, onAct, onNextHand, onRestart, onQuit, onBack }) {
   const m = view
   const h = m.hand
   const n = m.config.players
@@ -38,7 +38,7 @@ export default function Table({ view, me, actions, names, bubbles, onAct, onNext
   const turnText = h.finished
     ? null
     : pending
-      ? 'Te toca responder'
+      ? null // ya lo dice el cartel de abajo
       : waiting
         ? 'Esperando respuesta…'
         : myTurn
@@ -57,6 +57,11 @@ export default function Table({ view, me, actions, names, bubbles, onAct, onNext
           </div>
         ))}
         <div className="score-meta">
+          {onBack && (
+            <button className="chip chip-back" onClick={onBack}>
+              ‹ Inicio
+            </button>
+          )}
           <span className="chip">{h.truco.value > 1 ? `Vale ${h.truco.value}` : 'Sin truco'}</span>
           <span className="chip">Mano: {names[m.mano]}</span>
         </div>
@@ -209,11 +214,13 @@ function MatchOver({ m, me, onRestart, onQuit }) {
         <p className="final-score">
           {m.score[teamOf(me)]} a {m.score[1 - teamOf(me)]}
         </p>
-        <div className="sheet-actions">
-          <button className="btn btn-primary" onClick={onRestart}>
-            Revancha
-          </button>
-          <button className="btn btn-ghost" onClick={onQuit}>
+        <div className={onRestart ? 'sheet-actions' : 'sheet-actions single'}>
+          {onRestart && (
+            <button className="btn btn-primary" onClick={onRestart}>
+              Revancha
+            </button>
+          )}
+          <button className={onRestart ? 'btn btn-ghost' : 'btn btn-primary'} onClick={onQuit}>
             Volver al inicio
           </button>
         </div>

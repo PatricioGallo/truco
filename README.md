@@ -1,6 +1,12 @@
 # truco
 
-Truco argentino en React + Vite: contra la compu (1v1 y 2v2) y, próximamente, online con amigos.
+Truco argentino en React + Vite: contra la compu (1v1 y 2v2) y online con amigos.
+
+- Login con las mismas cuentas que el Sudoku (mismo proyecto de Supabase)
+- Buscador de jugadores, pedidos de amistad y lista de amigos
+- Partidas online por invitación o con código de sala; los asientos vacíos los juega la compu
+- El servidor (`supabase/functions/truco`) reparte y valida cada jugada con el mismo motor;
+  cada jugador recibe solo su vista, así nadie puede ver cartas ajenas
 
 ## Reglas
 
@@ -15,10 +21,17 @@ Truco argentino en React + Vite: contra la compu (1v1 y 2v2) y, próximamente, o
 
 ```bash
 npm install
-npm run dev     # http://localhost:5173
+npm run dev       # http://localhost:5173 (con Supabase)
+npm run dev:mock  # servidor simulado: abrí dos pestañas para jugar entre dos usuarios
 npm test        # motor de reglas e IA
 npm run build
 ```
 
 El motor (`src/engine/`) es JavaScript puro y sin dependencias: el mismo código va a
 correr en el servidor para las partidas online.
+
+## Supabase
+
+1. Correr `supabase/schema.sql` en el proyecto del Sudoku (tablas de amigos y salas).
+2. Desplegar la función `truco` con `supabase/functions/truco/index.ts` más
+   `src/server/rooms.js` y `src/engine/*.js` (en `server/` y `engine/`).

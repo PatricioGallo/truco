@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { fileURLToPath } from 'node:url'
 
-export default defineConfig({
+// `--mode mock` usa un servidor simulado (sin Supabase) para probar.
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     // La app queda instalada en el celular: contra la compu se juega sin conexión
@@ -38,9 +40,19 @@ export default defineConfig({
             handler: 'CacheFirst',
             options: { cacheName: 'google-fonts', cacheableResponse: { statuses: [0, 200] } },
           },
+          {
+            urlPattern: ({ url }) => url.pathname.includes('/storage/v1/object/public/avatars/'),
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'avatars', cacheableResponse: { statuses: [0, 200] } },
+          },
         ],
       },
     }),
   ],
   base: './',
-})
+  resolve: {
+    alias: {
+      '@api': fileURLToPath(new URL(mode === 'mock' ? './src/api/mock.js' : './src/api/supabase.js', import.meta.url)),
+    },
+  },
+}))
