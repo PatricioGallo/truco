@@ -36,7 +36,7 @@ export default function Table({ view, me, actions, names, bubbles, onAct, onNext
   const mazo = actions.find((a) => a.type === 'mazo')
   const myTurn = plays.length > 0
 
-  // Tanto (envido o flor querido): se muestra grande unos segundos y después queda chico en la mesa
+  // Tanto (envido o flor querido): se muestra unos segundos y después desaparece
   const tantoIdx = m.log.findLastIndex((e) => e.t === 'envido' || e.t === 'flor')
   const tanto = tantoIdx >= 0 ? m.log[tantoIdx] : null
   const tantoKey = tanto ? `${m.handNo}-${tantoIdx}` : null
@@ -112,9 +112,9 @@ export default function Table({ view, me, actions, names, bubbles, onAct, onNext
             </div>
           )
         })}
-        {turnText && !tanto && <p className="turn-text">{turnText}</p>}
-        {tanto && !h.finished && (
-          <div className={`tanto ${bigTanto === tantoKey ? '' : 'is-small'}`} role="status">
+        {turnText && bigTanto !== tantoKey && <p className="turn-text">{turnText}</p>}
+        {tanto && !h.finished && bigTanto === tantoKey && (
+          <div className="tanto" role="status">
             <span className="tanto-title">{tanto.t === 'envido' ? 'Envido' : 'Flor'}</span>
             <span className="tanto-row">
               {[myTeam, 1 - myTeam].map((t) => (

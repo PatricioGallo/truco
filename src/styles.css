@@ -641,9 +641,6 @@ html { background: var(--wood-2); }
 .tanto-row .is-winner b { color: var(--green); }
 .tanto-row .is-loser b { color: var(--red); opacity: 0.85; }
 .tanto-result { font-size: 0.85rem; font-weight: 700; }
-.tanto.is-small { top: auto; bottom: 8px; transform: translateX(-50%); padding: 6px 12px; flex-direction: row; gap: 10px; animation: none; }
-.tanto.is-small .tanto-row b { font-size: 1.1rem; }
-.tanto.is-small .tanto-result { display: none; }
 
 .credits { margin: 12px 0 0; font-size: 0.78rem; line-height: 1.4; color: var(--text-dim); text-align: center; }
 .credits a { color: var(--brass-2); }
