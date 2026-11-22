@@ -35,3 +35,10 @@ correr en el servidor para las partidas online.
 1. Correr `supabase/schema.sql` en el proyecto del Sudoku (tablas de amigos y salas).
 2. Desplegar la función `truco` con `supabase/functions/truco/index.ts` más
    `src/server/rooms.js` y `src/engine/*.js` (en `server/` y `engine/`).
+
+## Créditos
+
+Naipes de la baraja española: dibujos de [Basquetteur](https://commons.wikimedia.org/wiki/User:Basquetteur)
+(Wikimedia Commons), vía [spanish-playing-cards-svg](https://github.com/gjenkins20/spanish-playing-cards-svg),
+con licencia [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/). Se convirtieron a WebP
+(`public/naipes/`), con fondo blanco y esquinas redondeadas; se comparten con la misma licencia.

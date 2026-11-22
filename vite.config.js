@@ -10,7 +10,7 @@ export default defineConfig(({ mode }) => ({
     // La app queda instalada en el celular: contra la compu se juega sin conexión
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['icon.svg', 'apple-touch-icon.png', 'naipes/*.webp'],
       manifest: {
         name: 'Truco',
         short_name: 'Truco',
@@ -27,7 +27,7 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,webp}'],
         navigateFallback: 'index.html',
         runtimeCaching: [
           {

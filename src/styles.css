@@ -574,16 +574,6 @@ button:focus-visible { outline: 3px solid var(--brass-2); outline-offset: 2px; }
 }
 .profile .page-title { margin-top: 8px; }
 
-/* ---------- Naipe español (cara en SVG) ---------- */
-.card { display: block; overflow: hidden; padding: 0; }
-.card-face { display: block; width: 100%; height: 100%; }
-.card-index { font-family: 'Alfa Slab One', Georgia, serif; font-size: 15px; }
-.card-sm .card-index { font-size: 30px; }
-.card::after { display: none; }
-.card-sm::after { display: block; }
-.card { background: linear-gradient(160deg, #fffaf0, var(--cream) 60%, #f6e9cf); }
-.card-back::after { display: block; }
-
 /* ---------- Zona del notch ---------- */
 /* En iOS, lo que pasa por debajo de la barra de estado se ve borroso.
    Esta franja sólida del mismo color del fondo lo tapa. */
@@ -598,3 +588,62 @@ button:focus-visible { outline: 3px solid var(--brass-2); outline-offset: 2px; }
   pointer-events: none;
 }
 html { background: var(--wood-2); }
+
+/* ---------- Naipes (imágenes de la baraja española) ---------- */
+.card {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  aspect-ratio: 300 / 462;
+  background: #fff;
+  border-radius: calc(var(--w) * 0.07);
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.15), 0 6px 14px rgb(0 0 0 / 0.35);
+}
+.card::after { display: none; }
+.card img { display: block; width: 100%; height: 100%; object-fit: cover; pointer-events: none; -webkit-user-drag: none; }
+.card-back { background: #fff; }
+.card-back::after { display: none; }
+
+/* Cartas del rival: más grandes y en abanico, con el dorso de la baraja */
+.seat-hand { display: flex; }
+.seat-hand .card { --w: 46px; margin-left: -14px; transform: rotate(var(--r, 0deg)); }
+.seat-hand .card:first-child { margin-left: 0; }
+.seat-hand .card:nth-child(1) { --r: -8deg; }
+.seat-hand .card:nth-child(3) { --r: 8deg; }
+.players-4 .seat-hand .card { --w: 34px; margin-left: -12px; }
+.players-4 .seat-left .seat-hand .card,
+.players-4 .seat-right .seat-hand .card { --w: 30px; }
+
+/* Tanto cantado (envido / flor): quedan a la vista durante la mano */
+.tanto {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: rgb(255 246 229 / 0.96);
+  color: var(--ink);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.35);
+  animation: dialog-in 0.35s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+  white-space: nowrap;
+}
+@keyframes dialog-in { from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); } }
+.tanto-title { font-family: 'Alfa Slab One', serif; font-size: 0.95rem; color: var(--ink-soft); }
+.tanto-row { display: flex; gap: 14px; font-weight: 700; }
+.tanto-row span { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
+.tanto-row b { font-family: 'Alfa Slab One', serif; font-weight: 400; font-size: 1.7rem; }
+.tanto-row .is-winner b { color: var(--green); }
+.tanto-row .is-loser b { color: var(--red); opacity: 0.85; }
+.tanto-result { font-size: 0.85rem; font-weight: 700; }
+.tanto.is-small { top: auto; bottom: 8px; transform: translateX(-50%); padding: 6px 12px; flex-direction: row; gap: 10px; animation: none; }
+.tanto.is-small .tanto-row b { font-size: 1.1rem; }
+.tanto.is-small .tanto-result { display: none; }
+
+.credits { margin: 12px 0 0; font-size: 0.78rem; line-height: 1.4; color: var(--text-dim); text-align: center; }
+.credits a { color: var(--brass-2); }

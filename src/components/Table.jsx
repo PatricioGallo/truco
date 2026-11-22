@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { teamOf, TRUCO_NAMES } from '../engine/game.js'
 import Card from './Card.jsx'
 import Fosforos from './Fosforos.jsx'
@@ -34,6 +35,19 @@ export default function Table({ view, me, actions, names, bubbles, onAct, onNext
   const responses = actions.filter((a) => ['accept', 'reject', 'achico'].includes(a.type))
   const mazo = actions.find((a) => a.type === 'mazo')
   const myTurn = plays.length > 0
+
+  // Tanto (envido o flor querido): se muestra grande unos segundos y después queda chico en la mesa
+  const tantoIdx = m.log.findLastIndex((e) => e.t === 'envido' || e.t === 'flor')
+  const tanto = tantoIdx >= 0 ? m.log[tantoIdx] : null
+  const tantoKey = tanto ? `${m.handNo}-${tantoIdx}` : null
+  const [bigTanto, setBigTanto] = useState(null)
+  useEffect(() => {
+    if (!tantoKey) return
+    setBigTanto(tantoKey)
+    const t = setTimeout(() => setBigTanto((k) => (k === tantoKey ? null : k)), 4500)
+    return () => clearTimeout(t)
+  }, [tantoKey])
+  const sideName = (us) => (n === 2 ? (us ? 'Vos' : names[(me + 1) % 2]) : us ? 'Nosotros' : 'Ellos')
 
   const turnText = h.finished
     ? null
@@ -80,7 +94,7 @@ export default function Table({ view, me, actions, names, bubbles, onAct, onNext
                   <span className={`seat-name team-${teamOf(seat) === myTeam ? 'us' : 'them'}`}>{names[seat]}</span>
                   <span className="seat-hand">
                     {h.cards[seat].map((_, i) => (
-                      <Card key={i} id={null} size="xs" />
+                      <Card key={i} id={null} size="opp" />
                     ))}
                   </span>
                 </div>
@@ -98,7 +112,24 @@ export default function Table({ view, me, actions, names, bubbles, onAct, onNext
             </div>
           )
         })}
-        {turnText && <p className="turn-text">{turnText}</p>}
+        {turnText && !tanto && <p className="turn-text">{turnText}</p>}
+        {tanto && !h.finished && (
+          <div className={`tanto ${bigTanto === tantoKey ? '' : 'is-small'}`} role="status">
+            <span className="tanto-title">{tanto.t === 'envido' ? 'Envido' : 'Flor'}</span>
+            <span className="tanto-row">
+              {[myTeam, 1 - myTeam].map((t) => (
+                <span key={t} className={tanto.winner === t ? 'is-winner' : 'is-loser'}>
+                  <b>{tanto.points[t]}</b>
+                  {sideName(t === myTeam)}
+                </span>
+              ))}
+            </span>
+            <span className="tanto-result">
+              {tanto.winner === myTeam ? (n === 2 ? 'Ganaste' : 'Ganamos') : `Gana ${sideName(false)}`}
+              {tanto.points[0] === tanto.points[1] ? ' (empate: gana el mano)' : ''}
+            </span>
+          </div>
+        )}
       </section>
 
       {pending && (

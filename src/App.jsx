@@ -361,6 +361,17 @@ function Profile({ profile, onChange, onBack }) {
       <button className="btn btn-ghost" onClick={() => api.signOut()}>
         Cerrar sesión
       </button>
+      <p className="credits">
+        Naipes: dibujos de{' '}
+        <a href="https://commons.wikimedia.org/wiki/User:Basquetteur" target="_blank" rel="noreferrer">
+          Basquetteur
+        </a>{' '}
+        (Wikimedia Commons), con licencia{' '}
+        <a href="https://creativecommons.org/licenses/by-sa/3.0/deed.es" target="_blank" rel="noreferrer">
+          CC BY-SA 3.0
+        </a>
+        . Adaptados a imágenes livianas.
+      </p>
     </main>
   )
 }
