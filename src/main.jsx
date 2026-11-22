@@ -17,4 +17,10 @@ const Deck = () => (
   </div>
 )
 
-createRoot(document.getElementById('root')).render(<React.StrictMode>{showDeck ? <Deck /> : <App />}</React.StrictMode>)
+createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    {/* Franja sólida bajo el notch / Dynamic Island: tapa lo que pasa por debajo al hacer scroll */}
+    <div className="safe-top" aria-hidden="true" />
+    {showDeck ? <Deck /> : <App />}
+  </React.StrictMode>
+)

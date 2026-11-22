@@ -336,7 +336,7 @@ button:focus-visible { outline: 3px solid var(--brass-2); outline-offset: 2px; }
 .sheet-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 20;
+  z-index: 45; /* por encima de la franja del notch, para que también se oscurezca */
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -400,7 +400,7 @@ button:focus-visible { outline: 3px solid var(--brass-2); outline-offset: 2px; }
   color: #ffc9c2;
   line-height: 1.35;
 }
-.form-error.floating { position: fixed; top: calc(var(--safe-t) + 8px); left: 12px; right: 12px; z-index: 30; }
+.form-error.floating { position: fixed; top: calc(var(--safe-t) + 8px); left: 12px; right: 12px; z-index: 46; }
 .hint { margin: 0; text-align: center; color: var(--text-dim); font-size: 0.88rem; }
 
 /* Login */
@@ -583,3 +583,18 @@ button:focus-visible { outline: 3px solid var(--brass-2); outline-offset: 2px; }
 .card-sm::after { display: block; }
 .card { background: linear-gradient(160deg, #fffaf0, var(--cream) 60%, #f6e9cf); }
 .card-back::after { display: block; }
+
+/* ---------- Zona del notch ---------- */
+/* En iOS, lo que pasa por debajo de la barra de estado se ve borroso.
+   Esta franja sólida del mismo color del fondo lo tapa. */
+.safe-top {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--wood-2);
+  z-index: 40;
+  pointer-events: none;
+}
+html { background: var(--wood-2); }
