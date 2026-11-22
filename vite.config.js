@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => ({
     // La app queda instalada en el celular: contra la compu se juega sin conexión
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false, // se registra en main.jsx para buscar actualizaciones al volver a la app
       includeAssets: ['icon.svg', 'apple-touch-icon.png', 'naipes/*.webp'],
       manifest: {
         name: 'Truco',
