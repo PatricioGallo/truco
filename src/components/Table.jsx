@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { teamOf, TRUCO_NAMES } from '../engine/game.js'
+import { teamOf, TRUCO_NAMES, myEnvidoPoints } from '../engine/game.js'
 import Card from './Card.jsx'
 import Fosforos from './Fosforos.jsx'
 import { BUTTON_TEXT, CALL_TEXT, REASON_TEXT } from '../texts.js'
@@ -16,6 +16,10 @@ function position(seat, me, n) {
 function pendingText(h, names) {
   const p = h.pending
   if (!p) return null
+  if (p.kind === 'declare') {
+    const d = h.envido.declare
+    return d.best ? `${names[d.best.seat]} tiene ${d.best.points}. ¿Tenés más?` : 'Envido querido: cantá tus puntos'
+  }
   const who = names[p.bySeat]
   const what = CALL_TEXT[p.kind === 'truco' ? TRUCO_NAMES[p.call] : p.call] ?? p.call
   return `${who}: ${what}`
@@ -27,12 +31,17 @@ export default function Table({ view, me, actions, names, bubbles, onAct, onNext
   const n = m.config.players
   const myTeam = teamOf(me)
   const plays = actions.filter((a) => a.type === 'play').map((a) => a.card)
-  const pending = h.pending && h.pending.byTeam !== myTeam ? h.pending : null
-  const waiting = h.pending && h.pending.byTeam === myTeam
+  const declaring = h.pending?.kind === 'declare'
+  const myDeclare = declaring && actions.some((a) => a.type === 'declare' || a.type === 'buenas')
+  const pending = declaring ? (myDeclare ? h.pending : null) : h.pending && h.pending.byTeam !== myTeam ? h.pending : null
+  const waiting = declaring ? !myDeclare : h.pending && h.pending.byTeam === myTeam
   const calls = actions.filter((a) => a.type === 'call')
   const envidoCalls = calls.filter((a) => ['envido', 'real', 'falta'].includes(a.call))
   const otherCalls = calls.filter((a) => !['envido', 'real', 'falta'].includes(a.call))
-  const responses = actions.filter((a) => ['accept', 'reject', 'achico'].includes(a.type))
+  const responses = actions.filter((a) => ['accept', 'reject', 'achico', 'declare', 'buenas'].includes(a.type))
+  const responseText = (a) =>
+    ({ accept: 'Quiero', reject: 'No quiero', achico: 'Me achico', buenas: 'Son buenas' })[a.type] ??
+    `Tengo ${myEnvidoPoints(m, me)}`
   const mazo = actions.find((a) => a.type === 'mazo')
   const myTurn = plays.length > 0
 
@@ -119,14 +128,14 @@ export default function Table({ view, me, actions, names, bubbles, onAct, onNext
             <span className="tanto-row">
               {[myTeam, 1 - myTeam].map((t) => (
                 <span key={t} className={tanto.winner === t ? 'is-winner' : 'is-loser'}>
-                  <b>{tanto.points[t]}</b>
+                  <b>{tanto.points[t] ?? 'Buenas'}</b>
                   {sideName(t === myTeam)}
                 </span>
               ))}
             </span>
             <span className="tanto-result">
               {tanto.winner === myTeam ? (n === 2 ? 'Ganaste' : 'Ganamos') : `Gana ${sideName(false)}`}
-              {tanto.points[0] === tanto.points[1] ? ' (empate: gana el mano)' : ''}
+              {tanto.points[0] !== null && tanto.points[0] === tanto.points[1] ? ' (empate: gana el mano)' : ''}
             </span>
           </div>
         )}
@@ -155,7 +164,7 @@ export default function Table({ view, me, actions, names, bubbles, onAct, onNext
           <div className="action-row responses">
             {responses.map((a) => (
               <button key={a.type} className={`btn btn-${a.type}`} onClick={() => onAct(a)}>
-                {a.type === 'accept' ? 'Quiero' : a.type === 'reject' ? 'No quiero' : 'Me achico'}
+                {responseText(a)}
               </button>
             ))}
           </div>
@@ -192,7 +201,7 @@ function HandSummary({ m, me, names, onNext }) {
     if (e.t === 'envido' || e.t === 'flor') {
       lines.push({
         key: `${e.t}-d`,
-        text: `${e.t === 'envido' ? 'Envido' : 'Flor'}: ${TEAM[0]} ${e.points[myTeam]}, ${TEAM[1]} ${e.points[1 - myTeam]}`,
+        text: `${e.t === 'envido' ? 'Envido' : 'Flor'}: ${TEAM[0]} ${e.points[myTeam] ?? 'son buenas'}, ${TEAM[1]} ${e.points[1 - myTeam] ?? 'son buenas'}`,
       })
     }
     if (e.t === 'points')

@@ -50,6 +50,7 @@ export function deal(match, random = Math.random) {
     finished: false,
     result: null,
     showdown: false,
+    showSeats: [],
   }
   m.log = [{ t: 'deal', handNo: m.handNo, mano: m.mano }]
   return m
@@ -116,6 +117,7 @@ export function legalActions(match, seat) {
 
   if (h.pending) {
     const p = h.pending
+    if (p.kind === 'declare') return declareActions(m, seat)
     if (p.byTeam === team) return [] // esperando la respuesta del otro equipo
     if (p.kind === 'truco') {
       acts.push({ type: 'accept' }, { type: 'reject' })
@@ -152,6 +154,18 @@ export function legalActions(match, seat) {
   acts.push({ type: 'mazo' })
   return acts
 }
+
+/** Cantar los puntos del envido: el mano dice los suyos; los demás, si tienen más, o "son buenas". */
+function declareActions(m, seat) {
+  const d = m.hand.envido.declare
+  if (d.order[d.idx] !== seat) return []
+  if (!d.best) return [{ type: 'declare' }]
+  const mine = envidoPoints(cardsOf(m, seat))
+  return mine > d.best.points ? [{ type: 'declare' }, { type: 'buenas' }] : [{ type: 'buenas' }]
+}
+
+/** Puntos de envido que diría este asiento (para mostrar el botón). */
+export const myEnvidoPoints = (m, seat) => envidoPoints(cardsOf(m, seat))
 
 export const isLegal = (match, seat, action) =>
   legalActions(match, seat).some((a) => JSON.stringify(a) === JSON.stringify(action))
@@ -212,14 +226,40 @@ function resolveEnvido(m, accepted) {
   const chain = h.envido.chain
   const callerTeam = h.pending.byTeam
   if (accepted) {
-    const { winner, best } = compareTeams(m, (s) => envidoPoints(cardsOf(m, s)))
-    m.log.push({ t: 'envido', points: best, winner })
-    h.showdown = true // al final de la mano se muestran las cartas para comprobar
-    addPoints(m, winner, envidoAcceptedValue(m, chain, winner), 'envido')
+    // Se cantan los puntos empezando por el mano
+    h.envido.declare = { order: fromMano(m), idx: 0, best: null, said: {} }
+    h.pending = { kind: 'declare', call: 'puntos', byTeam: null, bySeat: null }
+    return
   } else {
     addPoints(m, callerTeam, envidoRejectedValue(m, chain, callerTeam), 'envido')
   }
   h.envido.done = true
+  restoreSuspended(h)
+}
+
+/** Avanza al próximo que tiene que hablar; el equipo que va ganando no habla. */
+function advanceDeclare(m) {
+  const h = m.hand
+  const d = h.envido.declare
+  d.idx++
+  while (d.idx < d.order.length && teamOf(d.order[d.idx]) === teamOf(d.best.seat)) d.idx++
+  if (d.idx < d.order.length) return
+  // Terminó: gana el que dijo más (a igualdad habló primero el más cercano al mano)
+  const winner = teamOf(d.best.seat)
+  const points = [null, null]
+  for (const [seat, pts] of Object.entries(d.said)) {
+    if (pts === null) continue
+    const t = teamOf(Number(seat))
+    points[t] = Math.max(points[t] ?? -1, pts)
+  }
+  m.log.push({ t: 'envido', points, winner })
+  h.showdown = true
+  h.showSeats = Object.entries(d.said)
+    .filter(([, pts]) => pts !== null)
+    .map(([seat]) => Number(seat))
+  h.envido.done = true
+  h.pending = null
+  addPoints(m, winner, envidoAcceptedValue(m, h.envido.chain, winner), 'envido')
   restoreSuspended(h)
 }
 
@@ -236,6 +276,7 @@ function resolveFlor(m, outcome) {
     const { winner, best } = compareTeams(m, (s) => (hasFlor(cardsOf(m, s)) ? florPoints(cardsOf(m, s)) : -1))
     m.log.push({ t: 'flor', points: best, winner })
     h.showdown = true
+    h.showSeats = [...Array(m.config.players).keys()].filter((s) => hasFlor(cardsOf(m, s)))
     addPoints(m, winner, last === 'contraflor_resto' ? faltaPoints(m, winner) : 6, 'flor')
   } else if (outcome === 'reject') {
     addPoints(m, h.pending.byTeam, chain.length === 2 ? 4 : 6, 'flor')
@@ -377,6 +418,23 @@ export function apply(match, seat, action) {
       break
     }
 
+    case 'declare': {
+      const pts = envidoPoints(cardsOf(m, seat))
+      const d = h.envido.declare
+      m.log.push({ t: 'declare', seat, points: pts })
+      d.said[seat] = pts
+      d.best = { seat, points: pts }
+      advanceDeclare(m)
+      break
+    }
+
+    case 'buenas': {
+      m.log.push({ t: 'buenas', seat })
+      h.envido.declare.said[seat] = null
+      advanceDeclare(m)
+      break
+    }
+
     case 'achico': {
       m.log.push({ t: 'achico', seat })
       resolveFlor(m, 'achico')
@@ -395,8 +453,9 @@ export function viewFor(match, seat) {
   if (!m.hand) return m
   const h = m.hand
   // Las cartas ajenas no jugadas solo se muestran al final si hubo envido o flor querido
-  const reveal = h.finished && h.showdown
+  // Al final se muestran las cartas de quienes cantaron sus puntos (los que dijeron "son buenas", no)
+  const reveal = (s) => h.finished && h.showdown && (h.showSeats ?? []).includes(s)
   h.cards = h.cards.map((c, s) => (s === seat ? c : c.map(() => null)))
-  h.initial = h.initial.map((c, s) => (s === seat || reveal ? c : null))
+  h.initial = h.initial.map((c, s) => (s === seat || reveal(s) ? c : null))
   return m
 }

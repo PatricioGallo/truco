@@ -27,13 +27,17 @@ export default function OnlineRoom({ room, profile, people, onBack }) {
   useEffect(() => {
     const prev = seen.current
     const start = prev.handNo === handNo ? prev.len : 0
-    const fresh = log.slice(start).filter((e) => ['call', 'accept', 'reject', 'achico', 'mazo'].includes(e.t))
+    const fresh = log.slice(start).filter((e) => ['call', 'accept', 'reject', 'achico', 'mazo', 'declare', 'buenas'].includes(e.t))
     seen.current = { handNo, len: log.length }
     if (prev.handNo === null) return // al abrir la sala no repetimos lo viejo
     for (const e of fresh) {
       if (e.seat === room.mySeat) continue
       const text =
-        e.t === 'call' ? actionText({ type: 'call', call: e.call }) : actionText({ type: e.t === 'achico' ? 'achico' : e.t })
+        e.t === 'call'
+          ? actionText({ type: 'call', call: e.call })
+          : e.t === 'declare'
+            ? `¡${e.points}!`
+            : actionText({ type: e.t })
       const id = Math.random()
       setBubbles((b) => ({ ...b, [e.seat]: { text, id } }))
       setTimeout(() => setBubbles((b) => (b[e.seat]?.id === id ? { ...b, [e.seat]: undefined } : b)), 2200)

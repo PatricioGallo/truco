@@ -29,6 +29,7 @@ export function actionText(a) {
   if (a.type === 'reject') return 'No quiero'
   if (a.type === 'achico') return 'Con flor me achico'
   if (a.type === 'mazo') return 'Me voy al mazo'
+  if (a.type === 'buenas') return 'Son buenas'
   return ''
 }
 

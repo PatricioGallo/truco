@@ -18,6 +18,18 @@ const play = (m, seat, card) => apply(m, seat, { type: 'play', card })
 const call = (m, seat, c) => apply(m, seat, { type: 'call', call: c })
 const yes = (m, seat) => apply(m, seat, { type: 'accept' })
 const no = (m, seat) => apply(m, seat, { type: 'reject' })
+/** Ronda de cantar los puntos: cada uno dice los suyos si le alcanzan, si no "son buenas". */
+function sayPoints(m) {
+  const said = []
+  while (m.hand.pending?.kind === 'declare') {
+    const seat = [...Array(m.config.players).keys()].find((s) => legalActions(m, s).length)
+    const acts = legalActions(m, seat)
+    const a = acts.find((x) => x.type === 'declare') ?? acts[0]
+    said.push([seat, a.type])
+    m = apply(m, seat, a)
+  }
+  return [m, said]
+}
 
 test('jerarquía de cartas', () => {
   const order = ['1e', '1b', '7e', '7o', '3c', '2o', '1c', '12b', '11e', '10o', '7c', '6e', '5b', '4o']
@@ -95,13 +107,17 @@ test('envido querido: gana el de más puntos; empate gana el mano', () => {
   let m = fixed([['7e', '6e', '4c'], ['5o', '4o', '1b']]) // 33 contra 29
   m = call(m, 0, 'envido')
   m = yes(m, 1)
+  let said
+  ;[m, said] = sayPoints(m)
+  assert.deepEqual(said, [[0, 'declare'], [1, 'buenas']]) // el mano dice 33; el otro: son buenas
   assert.deepEqual(m.score, [2, 0])
-  assert.ok(m.log.some((e) => e.t === 'envido' && e.winner === 0))
+  assert.ok(m.log.some((e) => e.t === 'envido' && e.winner === 0 && e.points[1] === null))
 
   let t = fixed([['7c', '1c', '4b'], ['7e', '1e', '4o']]) // 28 y 28: gana el mano (asiento 0)
   t = play(t, 0, '4b')
   t = call(t, 1, 'envido')
   t = yes(t, 0)
+  ;[t] = sayPoints(t)
   assert.deepEqual(t.score, [2, 0])
 })
 
@@ -117,6 +133,7 @@ test('envido, envido, real envido no querido = 4; falta en las malas gana el par
   assert.equal(faltaPoints(f, 0), 27) // en las malas: lo que le falta para ganar
   f = call(f, 0, 'falta')
   f = yes(f, 1)
+  ;[f] = sayPoints(f)
   assert.equal(f.winner, 0)
   assert.deepEqual(f.score, [30, 10])
 
@@ -129,10 +146,46 @@ test('el envido está primero: se puede contestar el truco con envido', () => {
   m = call(m, 0, 'truco')
   m = call(m, 1, 'envido')
   m = yes(m, 0)
+  let said
+  ;[m, said] = sayPoints(m)
+  assert.deepEqual(said, [[0, 'declare'], [1, 'declare']]) // el mano dice 5, el otro 33
   assert.deepEqual(m.score, [0, 2]) // 33 contra 5
   assert.equal(m.hand.pending.kind, 'truco') // sigue pendiente el truco
   m = yes(m, 1)
   assert.equal(m.hand.truco.value, 2)
+})
+
+test('cantar los puntos: el mano primero; con menos solo se puede decir son buenas', () => {
+  let m = fixed([['4c', '5o', '6b'], ['7e', '6e', '1o']]) // 6 contra 33
+  m = call(m, 0, 'envido')
+  m = yes(m, 1)
+  assert.deepEqual(legalActions(m, 1), []) // primero habla el mano
+  assert.deepEqual(legalActions(m, 0), [{ type: 'declare' }]) // el mano tiene que decirlos
+  m = apply(m, 0, { type: 'declare' })
+  assert.deepEqual(legalActions(m, 1), [{ type: 'declare' }, { type: 'buenas' }])
+  // Quien dice "son buenas" pierde aunque tenga más, y sus cartas no se muestran
+  m = apply(m, 1, { type: 'buenas' })
+  assert.deepEqual(m.score, [2, 0])
+  m = play(m, 0, '4c'); m = play(m, 1, '7e'); m = play(m, 1, '6e'); m = play(m, 0, '5o')
+  assert.equal(m.hand.finished, true)
+  const v = viewFor(m, 0)
+  assert.equal(v.hand.initial[1], null)
+})
+
+test('cantar los puntos de a cuatro: va pasando y no habla el equipo que va ganando', () => {
+  // mano asiento 0 (equipo 0). Envido: 0 tiene 25, 1 tiene 27, 2 (compañero de 0) tiene 31, 3 tiene 20
+  let m = fixed([['5c', '10c', '4o'], ['7b', '10b', '4e'], ['6o', '5o', '1c'], ['12e', '11e', '10o']])
+  m = call(m, 0, 'envido')
+  m = yes(m, 1)
+  let said
+  ;[m, said] = sayPoints(m)
+  assert.deepEqual(said, [
+    [0, 'declare'], // 25
+    [1, 'declare'], // 27, mejor
+    [2, 'declare'], // 31, mejor
+    [3, 'buenas'], // 20: son buenas
+  ])
+  assert.deepEqual(m.score, [2, 0])
 })
 
 test('flor sin flor en contra: 3 puntos y no hay envido', () => {

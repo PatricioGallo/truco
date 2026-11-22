@@ -1,6 +1,6 @@
 // Partida contra la compu: el jugador es el asiento 0; el resto juega la IA.
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createMatch, deal, apply, legalActions, viewFor, teamOf } from './engine/game.js'
+import { createMatch, deal, apply, legalActions, viewFor, teamOf, myEnvidoPoints } from './engine/game.js'
 import { chooseAction } from './engine/ai.js'
 import { actionText } from './texts.js'
 
@@ -43,12 +43,13 @@ export function useLocalMatch(initial) {
   const act = useCallback((seat, action) => {
     setMatch((m) => {
       try {
+        if (action.type === 'declare') say(seat, `¡${myEnvidoPoints(m, seat)}!`)
         return apply(m, seat, action)
       } catch {
         return m
       }
     })
-    say(seat, actionText(action))
+    if (action.type !== 'declare') say(seat, actionText(action))
   }, [])
 
   // Turno de la compu: actúa si el jugador no tiene nada para hacer

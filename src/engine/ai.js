@@ -71,6 +71,11 @@ export function chooseAction(m, seat, random = Math.random) {
   const manoBonus = teamOf(seat) === teamOf(m.mano) ? 1 : 0 // los empates los gana el mano
   const p = h.pending
 
+  // --- Cantar los puntos del envido: siempre la verdad ---
+  if (p?.kind === 'declare') {
+    return pick(acts, (a) => a.type === 'declare') ?? pick(acts, (a) => a.type === 'buenas')
+  }
+
   // --- Responder un canto ---
   if (p) {
     if (p.kind === 'flor') {
