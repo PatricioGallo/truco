@@ -6,6 +6,9 @@ import { createMatch, deal, apply, legalActions, viewFor, teamOf } from '../engi
 import { chooseAction } from '../engine/ai.js'
 
 const clone = (x) => JSON.parse(JSON.stringify(x))
+
+/** Tiempo para cada jugada. Si se acaba, la compu juega por quien no jugó. */
+export const TURN_MS = 30000
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 
 export function newCode(random = Math.random) {
@@ -17,7 +20,7 @@ export function newCode(random = Math.random) {
  * @param seats lista por asiento: { userId } invitado/anfitrión, 'cpu' o null (libre para quien tenga el código)
  * El anfitrión siempre es el asiento 0.
  */
-export function createRoom({ id, code, hostId, players = 2, flor = true, seats }) {
+export function createRoom({ id, code, hostId, players = 2, flor = true, seats, now = Date.now() }) {
   if (players !== 2 && players !== 4) throw new Error('Se juega de a 2 o de a 4')
   const list = Array.from({ length: players }, (_, s) => (s === 0 ? { userId: hostId } : seats?.[s] ?? null))
   const room = {
@@ -32,6 +35,7 @@ export function createRoom({ id, code, hostId, players = 2, flor = true, seats }
     ),
     match: null,
     version: 0,
+    turnAt: now,
   }
   return maybeStart(room)
 }
@@ -50,7 +54,7 @@ function maybeStart(room) {
 }
 
 /** Se suma a la sala: si estaba invitado ocupa su asiento; si no, el primero libre. */
-export function joinRoom(prev, userId) {
+export function joinRoom(prev, userId, now = Date.now()) {
   const room = clone(prev)
   if (room.status !== 'waiting') throw new Error('La partida ya empezó')
   let seat = seatOf(room, userId)
@@ -60,26 +64,29 @@ export function joinRoom(prev, userId) {
     room.seats[seat] = { type: 'user', userId, joined: true }
   } else room.seats[seat].joined = true
   room.version++
+  room.turnAt = now
   return maybeStart(room)
 }
 
 /** Rechazar una invitación: el asiento lo ocupa la compu. */
-export function declineRoom(prev, userId) {
+export function declineRoom(prev, userId, now = Date.now()) {
   const room = clone(prev)
   const seat = seatOf(room, userId)
   if (seat <= 0 || room.status !== 'waiting') throw new Error('No hay invitación para rechazar')
   room.seats[seat] = { type: 'cpu' }
   room.version++
+  room.turnAt = now
   return maybeStart(room)
 }
 
 /** El anfitrión completa con la compu los asientos que faltan y arranca. */
-export function startWithCpu(prev, userId) {
+export function startWithCpu(prev, userId, now = Date.now()) {
   const room = clone(prev)
   if (room.hostId !== userId) throw new Error('Solo el anfitrión puede arrancar')
   if (room.status !== 'waiting') throw new Error('La partida ya empezó')
   room.seats = room.seats.map((s) => (s.type === 'user' && s.joined ? s : { type: 'cpu' }))
   room.version++
+  room.turnAt = now
   return maybeStart(room)
 }
 
@@ -100,7 +107,7 @@ function runCpu(room, random = Math.random) {
 }
 
 /** Acción de una persona: jugar, cantar, responder, irse al mazo o pasar a la mano siguiente. */
-export function actRoom(prev, userId, action) {
+export function actRoom(prev, userId, action, now = Date.now()) {
   const room = clone(prev)
   if (room.status !== 'playing') throw new Error('La partida no está en juego')
   const seat = seatOf(room, userId)
@@ -117,6 +124,32 @@ export function actRoom(prev, userId, action) {
   runCpu(room)
   if (room.match?.winner !== null && room.match?.winner !== undefined) room.status = 'finished'
   room.version++
+  room.turnAt = now
+  return room
+}
+
+/**
+ * Se acabó el tiempo: la compu hace la jugada de quien no jugó (o reparte la mano siguiente).
+ * Lo puede pedir cualquiera de la partida, así no se traba si alguien cerró la app.
+ */
+export function timeoutRoom(prev, userId, now = Date.now()) {
+  const room = clone(prev)
+  if (room.status !== 'playing') throw new Error('La partida no está en juego')
+  if (seatOf(room, userId) === -1) throw new Error('No estás en esta partida')
+  if (now - (room.turnAt ?? 0) < TURN_MS - 1500) throw new Error('Todavía hay tiempo para jugar')
+  const m = room.match
+  if (m.hand.finished) {
+    if (m.winner === null) room.match = deal(m)
+  } else {
+    const seat = room.seats.findIndex((s, i) => s.type === 'user' && legalActions(m, i).length)
+    if (seat === -1) throw new Error('No hay ninguna jugada pendiente')
+    room.match = apply(m, seat, chooseAction(viewFor(m, seat), seat))
+    room.match.log.push({ t: 'timeout', seat })
+  }
+  runCpu(room)
+  if (room.match.winner !== null) room.status = 'finished'
+  room.version++
+  room.turnAt = now
   return room
 }
 
@@ -135,5 +168,6 @@ export function viewForUser(room, userId) {
     version: room.version,
     match: room.match && seat !== -1 ? viewFor(room.match, seat) : null,
     leftBy: room.leftBy ?? null,
+    turnAt: room.turnAt ?? null,
   }
 }

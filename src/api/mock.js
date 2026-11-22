@@ -188,6 +188,18 @@ export async function actRoom(roomId, action) {
   persist(d, room)
   return rooms.viewForUser(room, me())
 }
+export async function timeoutRoom(roomId) {
+  await net()
+  const d = db()
+  const room = rooms.timeoutRoom(d.rooms[roomId], me())
+  persist(d, room)
+  return rooms.viewForUser(room, me())
+}
+export async function getRoomView(roomId, myId) {
+  await net()
+  const v = db().views[roomId]?.[myId]
+  return v && v !== 'dismissed' ? v : null
+}
 export async function dismissRoom(roomId) {
   const d = db()
   if (d.views[roomId]) d.views[roomId][me()] = 'dismissed'

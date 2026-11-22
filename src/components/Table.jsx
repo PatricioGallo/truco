@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { teamOf, TRUCO_NAMES, myEnvidoPoints } from '../engine/game.js'
 import Card from './Card.jsx'
 import Fosforos from './Fosforos.jsx'
+import TurnTimer from './TurnTimer.jsx'
 import { BUTTON_TEXT, CALL_TEXT, REASON_TEXT } from '../texts.js'
 
 const TEAM = ['Nosotros', 'Ellos']
@@ -25,7 +26,7 @@ function pendingText(h, names) {
   return `${who}: ${what}`
 }
 
-export default function Table({ view, me, actions, names, bubbles, onAct, onNextHand, onRestart, onQuit, onBack }) {
+export default function Table({ view, me, actions, names, bubbles, onAct, onNextHand, onRestart, onQuit, onBack, timer }) {
   const m = view
   const h = m.hand
   const n = m.config.players
@@ -122,6 +123,9 @@ export default function Table({ view, me, actions, names, bubbles, onAct, onNext
           )
         })}
         {turnText && bigTanto !== tantoKey && <p className="turn-text">{turnText}</p>}
+        {timer && !h.finished && m.winner === null && (
+          <TurnTimer deadline={timer.deadline} total={timer.total} mine={actions.length > 0} onExpire={timer.onExpire} />
+        )}
         {tanto && !h.finished && bigTanto === tantoKey && (
           <div className="tanto" role="status">
             <span className="tanto-title">{tanto.t === 'envido' ? 'Envido' : 'Flor'}</span>

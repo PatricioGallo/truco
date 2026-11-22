@@ -82,8 +82,12 @@ function Main({ profile, setProfile }) {
   // Partidas online: lista inicial + cambios en tiempo real
   const [rooms, setRooms] = useState({})
   const [people, setPeople] = useState({ [profile.id]: profile })
+  const upsertRoom = useCallback(
+    (v) => v && setRooms((r) => (r[v.id] && r[v.id].version > v.version ? r : { ...r, [v.id]: v })),
+    []
+  )
   useEffect(() => {
-    const upsert = (v) => setRooms((r) => (r[v.id] && r[v.id].version > v.version ? r : { ...r, [v.id]: v }))
+    const upsert = upsertRoom
     api
       .myRooms(profile.id)
       .then((list) => setRooms(Object.fromEntries(list.map((v) => [v.id, v]))))
@@ -123,6 +127,7 @@ function Main({ profile, setProfile }) {
           onRestart={() => local.restart(n, local.match.config.flor)}
           onQuit={() => (local.quit(), go('home'))}
           onBack={() => go('home')}
+          timer={local.timer}
         />
       </div>
     )
@@ -131,7 +136,13 @@ function Main({ profile, setProfile }) {
   if (screen.name === 'room' && rooms[screen.roomId]) {
     return (
       <div className="screen">
-        <OnlineRoom room={rooms[screen.roomId]} profile={profile} people={people} onBack={() => go('home')} />
+        <OnlineRoom
+          room={rooms[screen.roomId]}
+          profile={profile}
+          people={people}
+          onView={upsertRoom}
+          onBack={() => go('home')}
+        />
       </div>
     )
   }

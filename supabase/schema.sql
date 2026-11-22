@@ -79,3 +79,34 @@ begin
     alter publication supabase_realtime add table public.truco_views;
   end if;
 end $$;
+
+-- Guarda la sala y las vistas de los jugadores en una sola llamada (más rápido)
+create or replace function public.truco_save(
+  p_id uuid, p_code text, p_host uuid, p_status text, p_state jsonb,
+  p_version integer, p_prev integer, p_views jsonb
+) returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_prev is null then
+    insert into truco_rooms (id, code, host_id, status, state, version)
+    values (p_id, p_code, p_host, p_status, p_state, p_version);
+  else
+    update truco_rooms
+      set status = p_status, state = p_state, version = p_version, updated_at = now()
+      where id = p_id and version = p_prev;
+    if not found then return false; end if;
+  end if;
+  insert into truco_views (room_id, user_id, view, version, updated_at)
+    select p_id, (v ->> 'user_id')::uuid, v -> 'view', p_version, now()
+    from jsonb_array_elements(p_views) v
+  on conflict (room_id, user_id) do update
+    set view = excluded.view, version = excluded.version, updated_at = now();
+  return true;
+end;
+$$;
+
+revoke execute on function public.truco_save(uuid, text, uuid, text, jsonb, integer, integer, jsonb) from public, anon, authenticated;
+grant execute on function public.truco_save(uuid, text, uuid, text, jsonb, integer, integer, jsonb) to service_role;

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createMatch, deal, apply, legalActions, viewFor, teamOf, myEnvidoPoints } from './engine/game.js'
 import { chooseAction } from './engine/ai.js'
 import { actionText } from './texts.js'
+import { TURN_MS } from './server/rooms.js'
 
 const KEY = 'truco.local'
 const ME = 0
@@ -67,11 +68,22 @@ export function useLocalMatch(initial) {
     return () => clearTimeout(timer.current)
   }, [match, act])
 
+  // Tiempo para jugar: si se acaba, la compu juega por vos
+  const myTurnKey = match && legalActions(match, ME).length ? `${match.handNo}-${match.log.length}` : null
+  const [deadline, setDeadline] = useState(null)
+  useEffect(() => setDeadline(myTurnKey ? Date.now() + TURN_MS : null), [myTurnKey])
+  const expire = () => {
+    if (!match || !legalActions(match, ME).length) return
+    const a = chooseAction(viewFor(match, ME), ME)
+    if (a) act(ME, a)
+  }
+  const turnTimer = { deadline, total: TURN_MS, onExpire: expire }
+
   const nextHand = () => setMatch((m) => deal(m))
   const restart = (players, flor) => setMatch(deal(createMatch({ players, flor })))
   const quit = () => setMatch(null)
 
-  return { match, view: match ? viewFor(match, ME) : null, me: ME, act, bubbles, nextHand, restart, quit }
+  return { match, view: match ? viewFor(match, ME) : null, me: ME, act, bubbles, nextHand, restart, quit, timer: turnTimer }
 }
 
 export function newLocalMatch(players, flor = true) {

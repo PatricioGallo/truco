@@ -1,5 +1,5 @@
 // Backend real: Supabase. Mismo proyecto y mismas cuentas que el Sudoku.
-import { createClient } from '@supabase/supabase-js'
+import { createClient, FunctionRegion } from '@supabase/supabase-js'
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js'
 import { normalizeUsername, validateSignUp, resizeImage } from './shared.js'
 
@@ -119,7 +119,8 @@ export async function removeFriendship(friendshipId) {
 
 // ---------- Partidas online ----------
 async function server(op, payload = {}) {
-  const { data, error } = await sb.functions.invoke('truco', { body: { op, ...payload } })
+  // Se ejecuta en la misma región que la base de datos: cada jugada hace menos viajes largos
+  const { data, error } = await sb.functions.invoke('truco', { body: { op, ...payload }, region: FunctionRegion.UsWest2 })
   if (error) {
     let msg = error.message
     try {
@@ -138,6 +139,13 @@ export const declineRoom = (roomId) => server('decline', { roomId })
 export const startRoom = (roomId) => server('start', { roomId }).then((d) => d.view)
 export const actRoom = (roomId, action) => server('act', { roomId, action }).then((d) => d.view)
 export const dismissRoom = (roomId) => server('dismiss', { roomId })
+export const timeoutRoom = (roomId) => server('timeout', { roomId }).then((d) => d.view)
+
+/** Mi vista de una partida (por si se perdió algún aviso en tiempo real). */
+export async function getRoomView(roomId, myId) {
+  const row = check(await sb.from('truco_views').select('view').eq('room_id', roomId).eq('user_id', myId).maybeSingle())
+  return row?.view ?? null
+}
 
 /** Mis partidas (invitaciones, en juego y terminadas). */
 export async function myRooms(myId) {

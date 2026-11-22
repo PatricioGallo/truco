@@ -69,3 +69,19 @@ test('con el código se puede sumar alguien a un asiento libre', () => {
   assert.equal(r.seats[1].userId, C)
   assert.throws(() => joinRoom(r, B))
 })
+
+test('si se acaba el tiempo, la compu juega por quien no jugó', async () => {
+  const { timeoutRoom, TURN_MS } = await import('../src/server/rooms.js')
+  let r = createRoom({ id: 'r', code: 'X', hostId: A, players: 2, seats: [null, { userId: B }], now: 0 })
+  r = joinRoom(r, B, 1000)
+  const turnSeat = r.match.hand.turn
+  assert.throws(() => timeoutRoom(r, A, 1000 + 5000), /Todavía hay tiempo/)
+  // Cualquiera de los dos puede pedirlo (aunque no sea su turno)
+  const asker = turnSeat === 0 ? B : A
+  const after = timeoutRoom(r, asker, 1000 + TURN_MS)
+  assert.equal(after.version, r.version + 1)
+  assert.ok(after.match.log.some((e) => e.t === 'timeout' && e.seat === turnSeat))
+  assert.equal(after.turnAt, 1000 + TURN_MS)
+  // Un desconocido no puede
+  assert.throws(() => timeoutRoom(r, C, 1000 + TURN_MS))
+})
