@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => ({
     VitePWA({
       registerType: 'autoUpdate',
       injectRegister: false, // se registra en main.jsx para buscar actualizaciones al volver a la app
-      includeAssets: ['icon.svg', 'apple-touch-icon.png', 'naipes/*.webp'],
+      includeAssets: ['favicon.png', 'apple-touch-icon.png', 'naipes/*.webp'],
       manifest: {
         name: 'Truco',
         short_name: 'Truco',
@@ -23,8 +23,9 @@ export default defineConfig(({ mode }) => ({
         background_color: '#2A1B14',
         theme_color: '#2A1B14',
         icons: [
+          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
           { src: 'apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
-          { src: 'icon.svg', sizes: 'any', type: 'image/svg+xml' },
         ],
       },
       workbox: {
