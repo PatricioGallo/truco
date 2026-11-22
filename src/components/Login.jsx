@@ -86,7 +86,6 @@ export default function Login() {
         <button className="btn btn-primary" disabled={loading}>
           {loading ? (signup ? 'Creando cuenta…' : 'Entrando…') : signup ? 'Crear cuenta' : 'Entrar'}
         </button>
-        <p className="hint">Si jugás al Sudoku, entrá con la misma cuenta.</p>
       </form>
     </div>
   )
