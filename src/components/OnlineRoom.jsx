@@ -47,7 +47,8 @@ export default function OnlineRoom({ room, profile, people, onBack, onView }) {
     if (s.type === 'cpu') return 'La compu'
     if (s.type === 'open') return 'Libre'
     const p = people[s.userId]
-    return p ? p.first_name || p.username : 'Jugador'
+    const name = p ? p.first_name || p.username : 'Jugador'
+    return s.away ? `${name} (compu)` : name
   })
 
   // Globitos con lo que dicen los demás (a partir del registro de la mano)
@@ -92,6 +93,7 @@ export default function OnlineRoom({ room, profile, people, onBack, onView }) {
   // ----- Sala de espera -----
   if (room.status === 'waiting') {
     const isHost = room.hostId === profile.id
+    const isPublic = room.visibility === 'public'
     const mine = room.seats[room.mySeat]
     const invitedNotJoined = mine?.type === 'user' && !mine.joined
     return (
@@ -100,8 +102,12 @@ export default function OnlineRoom({ room, profile, people, onBack, onView }) {
           ‹ Volver
         </button>
         <h2 className="page-title">{room.players === 2 ? 'Mano a mano' : 'De a cuatro'}</h2>
+        <p className="muted">
+          {isPublic ? 'Mesa pública' : 'Mesa privada'} · a {room.target ?? 30} · {room.flor ? 'con flor' : 'sin flor'}
+          {isPublic ? ' · suma al ranking' : ''}
+        </p>
         <p className="code-line">
-          Código de la sala: <b className="code">{room.code}</b>
+          Código de la mesa: <b className="code">{room.code}</b>
         </p>
         <ul className="lobby-seats">
           {room.seats.map((s, i) => (
@@ -114,7 +120,7 @@ export default function OnlineRoom({ room, profile, people, onBack, onView }) {
                 </span>
               </span>
               <span className={`tag ${s.type === 'cpu' || s.joined ? 'tag-ok' : ''}`}>
-                {s.type === 'cpu' ? 'Lista' : s.type === 'open' ? 'Con el código' : s.joined ? 'Adentro' : 'Invitado'}
+                {s.type === 'cpu' ? 'Lista' : s.type === 'open' ? (isPublic ? 'Libre' : 'Con el código') : s.joined ? 'Adentro' : 'Invitado'}
               </span>
             </li>
           ))}
@@ -131,12 +137,19 @@ export default function OnlineRoom({ room, profile, people, onBack, onView }) {
           </div>
         ) : (
           <>
-            <p className="muted">Esperando a que entren todos. La partida arranca sola cuando estén.</p>
-            {isHost && (
+            <p className="muted">
+              {isPublic
+                ? 'La mesa está en la lista de mesas abiertas. Arranca sola cuando se llene.'
+                : 'Esperando a que entren todos. La partida arranca sola cuando estén.'}
+            </p>
+            {isHost && !isPublic && (
               <button className="btn btn-ghost" disabled={busy} onClick={() => run(() => api.startRoom(room.id))}>
                 Arrancar ya, la compu completa
               </button>
             )}
+            <button className="btn btn-mazo" disabled={busy} onClick={() => run(async () => (await api.leaveRoom(room.id), onBack()))}>
+              {isHost ? 'Cerrar la mesa' : 'Salir de la mesa'}
+            </button>
           </>
         )}
       </main>
@@ -168,9 +181,18 @@ export default function OnlineRoom({ room, profile, people, onBack, onView }) {
     }
     run(async () => onView(await api.actRoom(room.id, a)))
   }
+  const away = room.seats[room.mySeat]?.away && room.status === 'playing'
   return (
     <>
       {error && <p className="form-error floating">{error}</p>}
+      {away && (
+        <div className="away-banner" role="alert">
+          <span>Se te acabó el tiempo: la compu está jugando por vos.</span>
+          <button className="btn btn-primary btn-small" disabled={busy} onClick={() => run(async () => onView(await api.backRoom(room.id)))}>
+            Volver a jugar
+          </button>
+        </div>
+      )}
       <Table
         view={match}
         me={room.mySeat}

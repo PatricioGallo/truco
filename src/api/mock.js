@@ -173,11 +173,11 @@ const me = () => {
   return id
 }
 
-export async function createRoom({ players, flor, seats }) {
+export async function createRoom({ players, flor, target, visibility, seats }) {
   await net()
   const d = db()
   const uid = me()
-  const room = rooms.createRoom({ id: crypto.randomUUID(), code: rooms.newCode(), hostId: uid, players, flor, seats })
+  const room = rooms.createRoom({ id: crypto.randomUUID(), code: rooms.newCode(), hostId: uid, players, flor, target, visibility, seats })
   persist(d, room)
   return rooms.viewForUser(room, uid)
 }
@@ -218,6 +218,37 @@ export async function timeoutRoom(roomId) {
   const room = rooms.timeoutRoom(d.rooms[roomId], me())
   persist(d, room)
   return rooms.viewForUser(room, me())
+}
+export async function leaveRoom(roomId) {
+  await net()
+  const d = db()
+  const room = rooms.leaveRoom(d.rooms[roomId], me())
+  persist(d, room)
+  delete d.views[roomId][me()]
+  save(d)
+}
+export async function backRoom(roomId) {
+  await net()
+  const d = db()
+  const room = rooms.backRoom(d.rooms[roomId], me())
+  persist(d, room)
+  return rooms.viewForUser(room, me())
+}
+export async function openTables() {
+  await net()
+  return Object.values(db().rooms)
+    .map(rooms.lobbyEntry)
+    .filter(Boolean)
+}
+export function subscribeLobby(cb) {
+  const onStorage = (e) => e.key === KEY && cb()
+  window.addEventListener('storage', onStorage)
+  const listener = { myId: null, fire: cb }
+  roomListeners.add(listener)
+  return () => {
+    window.removeEventListener('storage', onStorage)
+    roomListeners.delete(listener)
+  }
 }
 export async function getRoomView(roomId, myId) {
   await net()

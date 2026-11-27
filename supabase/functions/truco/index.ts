@@ -17,6 +17,9 @@ import {
   viewForUser,
   newCode,
   invitedUserIds,
+  leaveRoom,
+  backRoom,
+  lobbyEntry,
 } from './server/rooms.js'
 
 const cors = {
@@ -69,6 +72,16 @@ async function save(room: any, prev: number | null) {
   })
   if (error) throw error
   if (data === false) throw new UserError('Alguien jugó al mismo tiempo. Probá de nuevo.')
+  await syncLobby(room)
+}
+
+/** Mantiene la lista de mesas abiertas: aparece mientras la mesa pública espera gente. */
+async function syncLobby(room: any) {
+  const entry = lobbyEntry(room)
+  const { error } = entry
+    ? await admin.from('truco_lobby').upsert({ ...entry, updated_at: new Date().toISOString() })
+    : await admin.from('truco_lobby').delete().eq('room_id', room.id)
+  if (error) console.error('lobby', error)
 }
 
 Deno.serve(async (req) => {
@@ -89,7 +102,9 @@ Deno.serve(async (req) => {
     switch (body.op) {
       case 'create': {
         const players = body.players === 4 ? 4 : 2
-        const seats = Array.isArray(body.seats) ? body.seats.slice(0, players) : []
+        const target = body.target === 15 ? 15 : 30
+        const visibility = body.visibility === 'public' ? 'public' : 'private'
+        const seats = visibility === 'private' && Array.isArray(body.seats) ? body.seats.slice(0, players) : []
         // Solo se puede invitar a amigos
         const invited = seats.filter((s: any) => s?.userId).map((s: any) => s.userId)
         if (invited.length) {
@@ -102,7 +117,7 @@ Deno.serve(async (req) => {
           if (!invited.every((id: string) => ok.has(id))) throw new UserError('Solo podés invitar a tus amigos.')
         }
         for (let attempt = 0; attempt < 5; attempt++) {
-          const room = createRoom({ id: crypto.randomUUID(), code: newCode(), hostId: userId, players, flor: body.flor !== false, seats })
+          const room = createRoom({ id: crypto.randomUUID(), code: newCode(), hostId: userId, players, flor: body.flor !== false, target, visibility, seats })
           try {
             await save(room, null)
             return json({ view: viewForUser(room, userId) })
@@ -132,6 +147,17 @@ Deno.serve(async (req) => {
       case 'timeout':
         return await update((prev) => timeoutRoom(prev, userId), { id: body.roomId })
 
+      case 'leave': {
+        // Salir de una mesa que todavía no arrancó
+        const prev = await load({ id: body.roomId })
+        await save(leaveRoom(prev, userId), prev.version)
+        await admin.from('truco_views').delete().eq('room_id', body.roomId).eq('user_id', userId)
+        return json({ ok: true })
+      }
+
+      case 'back':
+        return await update((prev) => backRoom(prev, userId), { id: body.roomId })
+
       case 'dismiss':
         await admin.from('truco_views').delete().eq('room_id', body.roomId).eq('user_id', userId)
         return json({ ok: true })
@@ -142,7 +168,7 @@ Deno.serve(async (req) => {
   } catch (e: any) {
     const isUser =
       e instanceof UserError ||
-      /inválida|empezó|completa|anfitrión|invitación|no estás|no está en juego|no terminó|todavía hay tiempo|ninguna jugada/i.test(
+      /inválida|empezó|completa|anfitrión|invitación|no estás|no está en juego|no terminó|todavía hay tiempo|ninguna jugada|solo con personas|se juega a/i.test(
         e?.message ?? ''
       )
     if (!isUser) console.error(e)

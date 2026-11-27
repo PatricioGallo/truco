@@ -189,3 +189,35 @@ drop trigger if exists on_auth_user_created_email on auth.users;
 create trigger on_auth_user_created_email
   after insert on auth.users
   for each row execute function public.save_signup_email();
+
+-- Mesas públicas abiertas (sin cartas) -----------------------------------------
+-- La lista que ve todo el mundo. La escribe solo el servidor del juego.
+create table if not exists public.truco_lobby (
+  room_id uuid primary key references public.truco_rooms (id) on delete cascade,
+  code text not null,
+  host_id uuid not null references public.profiles (id) on delete cascade,
+  players integer not null check (players in (2, 4)),
+  target integer not null check (target in (15, 30)),
+  flor boolean not null,
+  taken integer not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists truco_lobby_updated on public.truco_lobby (updated_at desc);
+
+alter table public.truco_lobby enable row level security;
+
+drop policy if exists "ver mesas abiertas" on public.truco_lobby;
+create policy "ver mesas abiertas" on public.truco_lobby
+  for select to authenticated using (true);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'truco_lobby'
+  ) then
+    alter publication supabase_realtime add table public.truco_lobby;
+  end if;
+end $$;

@@ -16,19 +16,25 @@ export function newCode(random = Math.random) {
 }
 
 /**
- * Crea una sala.
- * @param seats lista por asiento: { userId } invitado/anfitrión, 'cpu' o null (libre para quien tenga el código)
+ * Crea una mesa.
+ * @param visibility 'private': con invitados, código y la compu si falta gente.
+ *                   'public': aparece en la lista de mesas abiertas y arranca solo con personas.
+ * @param seats (solo privadas) lista por asiento: { userId } invitado, 'cpu' o null (libre para quien tenga el código)
  * El anfitrión siempre es el asiento 0.
  */
-export function createRoom({ id, code, hostId, players = 2, flor = true, seats, now = Date.now() }) {
+export function createRoom({ id, code, hostId, players = 2, flor = true, target = 30, visibility = 'private', seats, now = Date.now() }) {
   if (players !== 2 && players !== 4) throw new Error('Se juega de a 2 o de a 4')
-  const list = Array.from({ length: players }, (_, s) => (s === 0 ? { userId: hostId } : seats?.[s] ?? null))
+  if (target !== 15 && target !== 30) throw new Error('Se juega a 15 o a 30')
+  const isPublic = visibility === 'public'
+  const list = Array.from({ length: players }, (_, s) => (s === 0 ? { userId: hostId } : isPublic ? null : seats?.[s] ?? null))
   const room = {
     id,
     code,
     hostId,
     players,
     flor,
+    target,
+    visibility: isPublic ? 'public' : 'private',
     status: 'waiting', // waiting | playing | finished | cancelled
     seats: list.map((x) =>
       x === 'cpu' ? { type: 'cpu' } : x?.userId ? { type: 'user', userId: x.userId, joined: x.userId === hostId } : { type: 'open' }
@@ -43,11 +49,13 @@ export function createRoom({ id, code, hostId, players = 2, flor = true, seats, 
 export const seatOf = (room, userId) => room.seats.findIndex((s) => s.type === 'user' && s.userId === userId)
 export const invitedUserIds = (room) => room.seats.filter((s) => s.type === 'user').map((s) => s.userId)
 export const memberIds = (room) => room.seats.filter((s) => s.type === 'user' && s.joined).map((s) => s.userId)
+/** Asientos que juega la compu: los suyos y los de quien está ausente. */
+const isBot = (s) => s.type === 'cpu' || (s.type === 'user' && s.away)
 
 function maybeStart(room) {
   if (room.status === 'waiting' && room.seats.every((s) => s.type === 'cpu' || (s.type === 'user' && s.joined))) {
     room.status = 'playing'
-    room.match = deal(createMatch({ players: room.players, flor: room.flor }))
+    room.match = deal(createMatch({ players: room.players, flor: room.flor, target: room.target ?? 30 }))
     runCpu(room)
   }
   return room
@@ -84,21 +92,49 @@ export function startWithCpu(prev, userId, now = Date.now()) {
   const room = clone(prev)
   if (room.hostId !== userId) throw new Error('Solo el anfitrión puede arrancar')
   if (room.status !== 'waiting') throw new Error('La partida ya empezó')
+  if (room.visibility === 'public') throw new Error('Las mesas públicas arrancan solo con personas')
   room.seats = room.seats.map((s) => (s.type === 'user' && s.joined ? s : { type: 'cpu' }))
   room.version++
   room.turnAt = now
   return maybeStart(room)
 }
 
-/** Juega la compu en sus asientos hasta que le toque a una persona. */
+/** Salir de una mesa que todavía no arrancó. Si sale el anfitrión, la mesa se cierra. */
+export function leaveRoom(prev, userId, now = Date.now()) {
+  const room = clone(prev)
+  if (room.status !== 'waiting') throw new Error('La partida ya empezó')
+  const seat = seatOf(room, userId)
+  if (seat === -1) throw new Error('No estás en esta partida')
+  if (seat === 0) {
+    room.status = 'cancelled'
+    room.leftBy = userId
+  } else room.seats[seat] = { type: 'open' }
+  room.version++
+  room.turnAt = now
+  return room
+}
+
+/** Vuelve a jugar quien estaba ausente (mientras tanto jugó la compu por él). */
+export function backRoom(prev, userId, now = Date.now()) {
+  const room = clone(prev)
+  const seat = seatOf(room, userId)
+  if (seat === -1) throw new Error('No estás en esta partida')
+  if (!room.seats[seat].away) return room
+  delete room.seats[seat].away
+  room.version++
+  room.turnAt = now
+  return room
+}
+
+/** Juega la compu en sus asientos (y en los de los ausentes) hasta que le toque a una persona. */
 function runCpu(room, random = Math.random) {
   let guard = 0
   while (room.match && room.match.winner === null && !room.match.hand.finished && guard++ < 200) {
-    const seat = room.seats.findIndex((s, i) => s.type === 'cpu' && legalActions(room.match, i).length)
+    const seat = room.seats.findIndex((s, i) => isBot(s) && legalActions(room.match, i).length)
     if (seat === -1) break
     // Si una persona también puede responder (2v2, mismo equipo), le dejamos la decisión
     const humanCan = room.seats.some(
-      (s, i) => s.type === 'user' && teamOf(i) === teamOf(seat) && legalActions(room.match, i).length
+      (s, i) => !isBot(s) && teamOf(i) === teamOf(seat) && legalActions(room.match, i).length
     )
     if (humanCan) break
     const action = chooseAction(viewFor(room.match, seat), seat, random)
@@ -112,12 +148,23 @@ export function actRoom(prev, userId, action, now = Date.now()) {
   if (room.status !== 'playing') throw new Error('La partida no está en juego')
   const seat = seatOf(room, userId)
   if (seat === -1) throw new Error('No estás en esta partida')
+  if (action.type !== 'leave') {
+    // Si juega, ya no está ausente
+    delete room.seats[seat].away
+    delete room.seats[seat].left
+  }
   if (action.type === 'next') {
     if (!room.match.hand.finished || room.match.winner !== null) throw new Error('La mano no terminó')
     room.match = deal(room.match)
   } else if (action.type === 'leave') {
-    room.status = 'cancelled'
-    room.leftBy = userId
+    if (room.visibility === 'public') {
+      // En las públicas la partida sigue: la compu juega por quien se fue
+      room.seats[seat].away = true
+      room.seats[seat].left = true
+    } else {
+      room.status = 'cancelled'
+      room.leftBy = userId
+    }
   } else {
     room.match = apply(room.match, seat, action)
   }
@@ -145,6 +192,7 @@ export function timeoutRoom(prev, userId, now = Date.now()) {
     if (seat === -1) throw new Error('No hay ninguna jugada pendiente')
     room.match = apply(m, seat, chooseAction(viewFor(m, seat), seat))
     room.match.log.push({ t: 'timeout', seat })
+    room.seats[seat].away = true // hasta que vuelva, juega la compu por él
   }
   runCpu(room)
   if (room.match.winner !== null) room.status = 'finished'
@@ -161,6 +209,8 @@ export function viewForUser(room, userId) {
     code: room.code,
     players: room.players,
     flor: room.flor,
+    target: room.target ?? 30,
+    visibility: room.visibility ?? 'private',
     hostId: room.hostId,
     status: room.status,
     seats: room.seats,
@@ -169,5 +219,19 @@ export function viewForUser(room, userId) {
     match: room.match && seat !== -1 ? viewFor(room.match, seat) : null,
     leftBy: room.leftBy ?? null,
     turnAt: room.turnAt ?? null,
+  }
+}
+
+/** Fila para la lista de mesas abiertas (sin cartas). null si la mesa no tiene que aparecer. */
+export function lobbyEntry(room) {
+  if (room.visibility !== 'public' || room.status !== 'waiting') return null
+  return {
+    room_id: room.id,
+    code: room.code,
+    host_id: room.hostId,
+    players: room.players,
+    target: room.target ?? 30,
+    flor: room.flor,
+    taken: room.seats.filter((s) => s.type === 'user').length,
   }
 }

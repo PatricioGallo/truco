@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { displayName } from '../api/shared.js'
 
-/** Armar una partida con amigos: modo, flor y quién va en cada asiento. */
+/** Crear una mesa online: pública (cualquiera se suma, suma al ranking) o privada (amigos, código, compu). */
 export default function NewOnline({ friends, preset, onCreate, onBack }) {
+  const [visibility, setVisibility] = useState(preset ? 'private' : 'public')
   const [players, setPlayers] = useState(2)
+  const [target, setTarget] = useState(30)
   const [flor, setFlor] = useState(true)
   const presetValue = preset ? `friend:${preset.id}` : null
   // asientos 1..n-1 (el 0 sos vos). En 2v2: 2 es tu compañero; 1 y 3, los rivales.
   const [seats, setSeats] = useState({ 1: presetValue ?? 'open', 2: 'cpu', 3: 'cpu' })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const isPublic = visibility === 'public'
 
   const switchPlayers = (n) => {
     setPlayers(n)
@@ -21,68 +24,108 @@ export default function NewOnline({ friends, preset, onCreate, onBack }) {
     .filter(([s]) => Number(s) < players)
     .map(([, v]) => v)
     .filter((v) => v.startsWith('friend:'))
-  const repeated = chosen.length !== new Set(chosen).size
+  const repeated = !isPublic && chosen.length !== new Set(chosen).size
 
   const create = async () => {
     setBusy(true)
     setError('')
     try {
       const list = [null]
-      for (let s = 1; s < players; s++) {
-        const v = seats[s]
-        list.push(v === 'cpu' ? 'cpu' : v === 'open' ? null : { userId: v.slice(7) })
+      if (!isPublic) {
+        for (let s = 1; s < players; s++) {
+          const v = seats[s]
+          list.push(v === 'cpu' ? 'cpu' : v === 'open' ? null : { userId: v.slice(7) })
+        }
       }
-      await onCreate({ players, flor, seats: list })
+      await onCreate({ players, flor, target, visibility, seats: list })
     } catch (e) {
       setError(e.message)
       setBusy(false)
     }
   }
 
+  const Tabs = ({ value, options, onChange }) => (
+    <div className="segmented" role="tablist">
+      {options.map(([v, text]) => (
+        <button key={String(v)} type="button" role="tab" aria-selected={value === v} onClick={() => onChange(v)}>
+          {text}
+        </button>
+      ))}
+    </div>
+  )
+
   return (
     <main className="new-online">
       <button className="back" onClick={onBack}>
         ‹ Volver
       </button>
-      <h2 className="page-title">Jugar con amigos</h2>
+      <h2 className="page-title">Crear mesa</h2>
 
-      <div className="segmented" role="tablist">
-        <button role="tab" aria-selected={players === 2} onClick={() => switchPlayers(2)}>
-          Mano a mano
-        </button>
-        <button role="tab" aria-selected={players === 4} onClick={() => switchPlayers(4)}>
-          De a cuatro
-        </button>
-      </div>
+      <Tabs
+        value={visibility}
+        options={[
+          ['public', 'Pública'],
+          ['private', 'Privada'],
+        ]}
+        onChange={setVisibility}
+      />
+      <p className="muted small">
+        {isPublic
+          ? 'Aparece en la lista de mesas abiertas y se suma cualquiera. Arranca cuando se llena y suma al ranking.'
+          : 'Solo para tus amigos o quien tenga el código. Podés completar con la compu. No suma al ranking.'}
+      </p>
 
       <section className="panel">
-        {order.map(([seat, label]) => (
-          <label key={seat} className="field">
-            <span>{label}</span>
-            <select value={seats[seat]} onChange={(e) => setSeats((x) => ({ ...x, [seat]: e.target.value }))}>
-              <option value="cpu">La compu</option>
-              <option value="open">Cualquiera con el código</option>
-              {friends.map(({ profile: p }) => (
-                <option key={p.id} value={`friend:${p.id}`}>
-                  {displayName(p)} (@{p.username})
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
+        <div className="field">
+          <span>Jugadores</span>
+          <Tabs
+            value={players}
+            options={[
+              [2, 'Mano a mano'],
+              [4, 'De a cuatro'],
+            ]}
+            onChange={switchPlayers}
+          />
+        </div>
+        <div className="field">
+          <span>Partida a</span>
+          <Tabs
+            value={target}
+            options={[
+              [15, '15 puntos'],
+              [30, '30 puntos'],
+            ]}
+            onChange={setTarget}
+          />
+        </div>
+        {!isPublic &&
+          order.map(([seat, label]) => (
+            <label key={seat} className="field">
+              <span>{label}</span>
+              <select value={seats[seat]} onChange={(e) => setSeats((x) => ({ ...x, [seat]: e.target.value }))}>
+                <option value="cpu">La compu</option>
+                <option value="open">Cualquiera con el código</option>
+                {friends.map(({ profile: p }) => (
+                  <option key={p.id} value={`friend:${p.id}`}>
+                    {displayName(p)} (@{p.username})
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
         <label className="toggle">
           <input type="checkbox" checked={flor} onChange={(e) => setFlor(e.target.checked)} />
           <span>Con flor</span>
         </label>
-        {friends.length === 0 && (
-          <p className="muted small">Todavía no tenés amigos. Podés crear la sala y pasarle el código a quien quieras.</p>
+        {!isPublic && friends.length === 0 && (
+          <p className="muted small">Todavía no tenés amigos. Podés crear la mesa y pasarle el código a quien quieras.</p>
         )}
       </section>
 
       {repeated && <p className="form-error">Elegiste al mismo amigo en dos lugares.</p>}
       {error && <p className="form-error">{error}</p>}
       <button className="btn btn-primary" disabled={busy || repeated} onClick={create}>
-        {busy ? 'Creando…' : 'Crear partida e invitar'}
+        {busy ? 'Creando…' : isPublic ? 'Abrir mesa' : 'Crear mesa e invitar'}
       </button>
     </main>
   )

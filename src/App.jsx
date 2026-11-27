@@ -211,12 +211,14 @@ function Main({ profile, setProfile }) {
     return withToast(
       <div className="screen">
         <OnlineHome
+          profile={profile}
           friends={friends}
           rooms={Object.values(rooms)}
           onNew={() => go('new')}
           onFriends={() => go('friends')}
           onOpenRoom={(id) => go('room', { roomId: id })}
           onJoinCode={async (code) => openRoom(await api.joinRoom({ code }))}
+          onJoinTable={async (roomId) => openRoom(await api.joinRoom({ roomId }))}
           onBack={() => go('home')}
         />
       </div>

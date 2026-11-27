@@ -85,3 +85,69 @@ test('si se acaba el tiempo, la compu juega por quien no jugó', async () => {
   // Un desconocido no puede
   assert.throws(() => timeoutRoom(r, C, 1000 + TURN_MS))
 })
+
+test('mesa pública: todos los lugares libres, a 15, y no arranca con la compu', async () => {
+  const { lobbyEntry } = await import('../src/server/rooms.js')
+  let r = createRoom({ id: 'p', code: 'PUB01', hostId: A, players: 4, target: 15, visibility: 'public', seats: [null, 'cpu', { userId: B }, 'cpu'] })
+  assert.deepEqual(r.seats.map((s) => s.type), ['user', 'open', 'open', 'open'])
+  assert.throws(() => startWithCpu(r, A), /solo con personas/)
+  assert.deepEqual(lobbyEntry(r), { room_id: 'p', code: 'PUB01', host_id: A, players: 4, target: 15, flor: true, taken: 1 })
+  r = joinRoom(r, B)
+  r = joinRoom(r, C)
+  assert.equal(lobbyEntry(r).taken, 3)
+  r = joinRoom(r, 'user-d')
+  assert.equal(r.status, 'playing')
+  assert.equal(r.match.config.target, 15)
+  assert.equal(lobbyEntry(r), null) // ya no aparece en la lista
+  assert.equal(viewForUser(r, A).target, 15)
+})
+
+test('salir de una mesa que no arrancó: libera el lugar; si sale el anfitrión, se cierra', async () => {
+  const { leaveRoom } = await import('../src/server/rooms.js')
+  let r = createRoom({ id: 'p', code: 'X', hostId: A, players: 4, visibility: 'public' })
+  r = joinRoom(r, B)
+  r = leaveRoom(r, B)
+  assert.equal(r.seats[1].type, 'open')
+  assert.equal(r.status, 'waiting')
+  r = leaveRoom(r, A)
+  assert.equal(r.status, 'cancelled')
+})
+
+test('ausente: después del tiempo la compu juega por él hasta que vuelve', async () => {
+  const { timeoutRoom, backRoom, TURN_MS } = await import('../src/server/rooms.js')
+  let r = createRoom({ id: 'p', code: 'X', hostId: A, players: 2, visibility: 'public', now: 0 })
+  r = joinRoom(r, B, 0)
+  const absentSeat = r.match.hand.turn
+  const absent = absentSeat === 0 ? A : B
+  const present = absentSeat === 0 ? B : A
+  r = timeoutRoom(r, present, TURN_MS)
+  assert.equal(r.seats[absentSeat].away, true)
+  // Mientras está ausente, cuando el que está le pasa el turno, la compu contesta al instante
+  let guard = 0
+  while (r.status === 'playing' && guard++ < 50) {
+    const seat = absentSeat === 0 ? 1 : 0
+    if (r.match.hand.finished) break
+    const acts = legalActions(r.match, seat)
+    assert.ok(acts.length, 'al que está presente siempre le toca')
+    r = actRoom(r, present, acts.find((a) => a.type === 'play') ?? acts.find((a) => a.type === 'accept') ?? acts[0])
+  }
+  r = backRoom(r, absent)
+  assert.equal(r.seats[absentSeat].away, undefined)
+})
+
+test('en una pública, irse no cancela: la compu termina la partida por quien se fue', () => {
+  let r = createRoom({ id: 'p', code: 'X', hostId: A, players: 2, visibility: 'public' })
+  r = joinRoom(r, B)
+  r = actRoom(r, B, { type: 'leave' })
+  assert.equal(r.status, 'playing')
+  assert.equal(r.seats[1].left, true)
+  let guard = 0
+  while (r.status === 'playing' && guard++ < 2000) {
+    if (r.match.hand.finished) { r = actRoom(r, A, { type: 'next' }); continue }
+    const acts = legalActions(r.match, 0)
+    assert.ok(acts.length)
+    r = actRoom(r, A, acts.find((a) => a.type === 'play') ?? acts.find((a) => a.type === 'accept') ?? acts[0])
+  }
+  assert.equal(r.status, 'finished')
+  assert.equal(r.seats[1].left, true)
+})

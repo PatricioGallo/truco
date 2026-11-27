@@ -191,6 +191,25 @@ export const startRoom = (roomId) => server('start', { roomId }).then((d) => d.v
 export const actRoom = (roomId, action) => server('act', { roomId, action }).then((d) => d.view)
 export const dismissRoom = (roomId) => server('dismiss', { roomId })
 export const timeoutRoom = (roomId) => server('timeout', { roomId }).then((d) => d.view)
+export const leaveRoom = (roomId) => server('leave', { roomId })
+export const backRoom = (roomId) => server('back', { roomId }).then((d) => d.view)
+
+/** Mesas públicas esperando gente (las de la última media hora). */
+export async function openTables() {
+  const since = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+  return check(
+    await sb.from('truco_lobby').select('*').gt('updated_at', since).order('created_at', { ascending: false }).limit(50)
+  )
+}
+
+/** Avisa cuando cambia la lista de mesas abiertas. */
+export function subscribeLobby(cb) {
+  const channel = sb
+    .channel('truco-lobby')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'truco_lobby' }, () => cb())
+    .subscribe()
+  return () => sb.removeChannel(channel)
+}
 
 /** Mi vista de una partida (por si se perdió algún aviso en tiempo real). */
 export async function getRoomView(roomId, myId) {
