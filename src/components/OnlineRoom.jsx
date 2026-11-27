@@ -6,6 +6,7 @@ import { displayName } from '../api/shared.js'
 import { actionText } from '../texts.js'
 import Table from './Table.jsx'
 import Avatar from './Avatar.jsx'
+import { LevelBadge, RatingResult } from './Ranking.jsx'
 
 /** Sala online: espera de jugadores y mesa. `room` es mi vista (llega en tiempo real). */
 export default function OnlineRoom({ room, profile, people, onBack, onView }) {
@@ -15,6 +16,12 @@ export default function OnlineRoom({ room, profile, people, onBack, onView }) {
   const seen = useRef({ handNo: null, len: 0 })
   const [optimistic, setOptimistic] = useState(null) // jugada propia mostrada antes de que conteste el servidor
   const [deadline, setDeadline] = useState(null)
+  const [levels, setLevels] = useState({}) // ranking de quienes están en la mesa
+  const userIds = room.seats.filter((s) => s.type === 'user').map((s) => s.userId).join(',')
+  useEffect(() => {
+    if (room.visibility !== 'public' || !userIds) return
+    api.ratingsByIds(userIds.split(',')).then(setLevels).catch(() => {})
+  }, [userIds, room.visibility])
 
   // Cada vez que cambia la partida arranca el tiempo de la jugada siguiente
   useEffect(() => {
@@ -118,6 +125,7 @@ export default function OnlineRoom({ room, profile, people, onBack, onView }) {
                 <span className="muted">
                   {room.players === 4 ? (i % 2 === room.mySeat % 2 ? 'Tu equipo' : 'Rivales') : i === room.mySeat ? '' : 'Rival'}
                 </span>
+                {isPublic && s.type === 'user' && <LevelBadge points={levels[s.userId]?.points ?? 0} />}
               </span>
               <span className={`tag ${s.type === 'cpu' || s.joined ? 'tag-ok' : ''}`}>
                 {s.type === 'cpu' ? 'Lista' : s.type === 'open' ? (isPublic ? 'Libre' : 'Con el código') : s.joined ? 'Adentro' : 'Invitado'}
@@ -203,6 +211,7 @@ export default function OnlineRoom({ room, profile, people, onBack, onView }) {
         onNextHand={() => run(() => api.actRoom(room.id, { type: 'next' }).then(onView).catch(() => {}))}
         timer={{ deadline, total: TURN_MS, onExpire: expire }}
         onRestart={null}
+        matchExtra={room.visibility === 'public' ? <RatingResult roomId={room.id} userId={profile.id} /> : null}
         onQuit={() => (room.status === 'finished' ? (api.dismissRoom(room.id), onBack()) : onBack())}
         onBack={onBack}
       />

@@ -235,3 +235,30 @@ export function subscribeRooms(myId, cb) {
     .subscribe()
   return () => sb.removeChannel(channel)
 }
+
+// ---------- Ranking ----------
+/** Ranking de varios jugadores: { [userId]: { points, mmr, games, wins, streak } } (los que no jugaron no aparecen). */
+export async function ratingsByIds(ids) {
+  if (!ids.length) return {}
+  const rows = check(await sb.from('truco_ratings').select('*').in('user_id', ids))
+  return Object.fromEntries(rows.map((r) => [r.user_id, r]))
+}
+
+/** Los mejores del ranking. */
+export async function leaderboard(limit = 50) {
+  return check(await sb.from('truco_ratings').select('*').gt('games', 0).order('points', { ascending: false }).limit(limit))
+}
+
+/** Puesto en el ranking según los puntos (1 = el primero). */
+export async function rankPosition(points) {
+  const { count, error } = await sb.from('truco_ratings').select('user_id', { count: 'exact', head: true }).gt('points', points)
+  if (error) throw new Error(explain(error))
+  return (count ?? 0) + 1
+}
+
+/** Cuánto cambió mi ranking en una partida (null si todavía no se anotó o no rankeaba). */
+export async function ratingChange(roomId, myId) {
+  return check(
+    await sb.from('truco_rating_log').select('*').eq('room_id', roomId).eq('user_id', myId).maybeSingle()
+  )
+}

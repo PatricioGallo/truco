@@ -3,6 +3,7 @@
 // pueden abrir dos pestañas con dos usuarios y jugar entre ellos.
 import { normalizeUsername, normalizeEmail, looksLikeEmail, validateSignUp, validateEmail, resizeImage } from './shared.js'
 import * as rooms from '../server/rooms.js'
+import { rateRoom } from '../server/ranking.js'
 
 export const configured = true
 const KEY = 'truco.mockdb'
@@ -161,6 +162,17 @@ export function subscribeFriendships(myId, cb) {
 // ---------- Partidas online (el "servidor" corre acá mismo) ----------
 function persist(d, room) {
   d.rooms[room.id] = room
+  // Ranking al terminar una mesa pública (una sola vez)
+  d.ratings ??= {}
+  d.ratingLog ??= {}
+  if (room.status === 'finished' && room.visibility === 'public' && !d.ratingLog[room.id]) {
+    d.ratingLog[room.id] = {}
+    for (const r of rateRoom(room, d.ratings)) {
+      const { user_id, delta, level, ...rest } = r
+      d.ratings[user_id] = { user_id, ...rest }
+      d.ratingLog[room.id][user_id] = { room_id: room.id, user_id, delta, points_after: r.points, level_after: level }
+    }
+  }
   for (const uid of rooms.invitedUserIds(room)) {
     d.views[room.id] ??= {}
     if (d.views[room.id][uid] !== 'dismissed') d.views[room.id][uid] = rooms.viewForUser(room, uid)
@@ -297,4 +309,22 @@ export function seedDemo() {
     d.profiles[id] = { id, username, first_name: f, last_name: l, avatar_url: null }
   }
   save(d)
+}
+
+// ---------- Ranking ----------
+export async function ratingsByIds(ids) {
+  const all = db().ratings ?? {}
+  return Object.fromEntries(ids.filter((id) => all[id]).map((id) => [id, all[id]]))
+}
+export async function leaderboard(limit = 50) {
+  return Object.values(db().ratings ?? {})
+    .filter((r) => r.games > 0)
+    .sort((a, b) => b.points - a.points)
+    .slice(0, limit)
+}
+export async function rankPosition(points) {
+  return Object.values(db().ratings ?? {}).filter((r) => r.points > points).length + 1
+}
+export async function ratingChange(roomId, myId) {
+  return db().ratingLog?.[roomId]?.[myId] ?? null
 }

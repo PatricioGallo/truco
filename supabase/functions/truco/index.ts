@@ -21,6 +21,7 @@ import {
   backRoom,
   lobbyEntry,
 } from './server/rooms.js'
+import { rateRoom } from './server/ranking.js'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -83,6 +84,24 @@ async function save(room: any, prev: number | null) {
   if (error) throw error
   if (data === false) throw new UserError('Alguien jugó al mismo tiempo. Probá de nuevo.')
   await syncLobby(room)
+  if (room.status === 'finished' && room.visibility === 'public') await applyRanking(room)
+}
+
+/** Al terminar una mesa pública, actualiza el ranking de quienes jugaron (una sola vez por partida). */
+async function applyRanking(room: any) {
+  try {
+    const ids = invitedUserIds(room)
+    const { data: already } = await admin.from('truco_rating_log').select('user_id').eq('room_id', room.id).limit(1)
+    if (already?.length) return
+    const { data } = await admin.from('truco_ratings').select('*').in('user_id', ids)
+    const ratings = Object.fromEntries((data ?? []).map((r: any) => [r.user_id, r]))
+    const rows = rateRoom(room, ratings)
+    if (!rows.length) return
+    const { error } = await admin.rpc('truco_apply_ratings', { p_room: room.id, p_rows: rows })
+    if (error) throw error
+  } catch (e) {
+    console.error('ranking', e)
+  }
 }
 
 /** Mantiene la lista de mesas abiertas: aparece mientras la mesa pública espera gente. */

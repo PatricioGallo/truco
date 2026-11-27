@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import * as api from '@api'
 import { displayName } from '../api/shared.js'
 import Avatar from './Avatar.jsx'
+import { LevelBadge, LevelPanel, useMyRating } from './Ranking.jsx'
 
 /** Mesas públicas esperando gente (se actualiza sola). */
 function useOpenTables() {
   const [tables, setTables] = useState(null)
   const [hosts, setHosts] = useState({})
+  const [hostLevels, setHostLevels] = useState({})
   useEffect(() => {
     let alive = true
     const load = () =>
@@ -17,8 +19,11 @@ function useOpenTables() {
           setTables(list)
           const ids = [...new Set(list.map((t) => t.host_id))]
           if (ids.length) {
-            const ps = await api.profilesByIds(ids)
-            if (alive) setHosts((h) => ({ ...h, ...Object.fromEntries(ps.map((p) => [p.id, p])) }))
+            const [ps, rs] = await Promise.all([api.profilesByIds(ids), api.ratingsByIds(ids)])
+            if (alive) {
+              setHosts((h) => ({ ...h, ...Object.fromEntries(ps.map((p) => [p.id, p])) }))
+              setHostLevels((l) => ({ ...l, ...rs }))
+            }
           }
         })
         .catch(() => alive && setTables((t) => t ?? []))
@@ -31,18 +36,19 @@ function useOpenTables() {
       clearInterval(t)
     }
   }, [])
-  return { tables, hosts }
+  return { tables, hosts, hostLevels }
 }
 
 /** Vos en modo online: mesas abiertas, crear mesa, sumarse con código, amigos y partidas en curso. */
-export default function OnlineHome({ profile, friends, rooms, onNew, onFriends, onOpenRoom, onJoinCode, onJoinTable, onBack }) {
+export default function OnlineHome({ profile, friends, rooms, onNew, onFriends, onOpenRoom, onJoinCode, onJoinTable, onRanking, onBack }) {
   const [code, setCode] = useState('')
   const [codeError, setCodeError] = useState('')
   const [filter, setFilter] = useState(0) // 0 todas, 2 mano a mano, 4 de a cuatro
   const [joining, setJoining] = useState(null)
   const [joinError, setJoinError] = useState('')
   const [partner, setPartner] = useState('') // amigo con quien sumarse en dupla
-  const { tables, hosts } = useOpenTables()
+  const { tables, hosts, hostLevels } = useOpenTables()
+  const myRating = useMyRating(profile.id, rooms.filter((r) => r.status === 'finished').length)
   const mine = new Set(rooms.map((r) => r.id))
   const visible = (tables ?? []).filter(
     (t) =>
@@ -71,6 +77,7 @@ export default function OnlineHome({ profile, friends, rooms, onNew, onFriends, 
         ‹ Volver
       </button>
       <h2 className="page-title">Online</h2>
+      <LevelPanel rating={myRating} onOpenRanking={onRanking} />
 
       {active.length > 0 && (
         <section className="block">
@@ -144,6 +151,7 @@ export default function OnlineHome({ profile, friends, rooms, onNew, onFriends, 
                   <span className="muted">
                     {t.players === 2 ? 'Mano a mano' : 'De a cuatro'} · a {t.target} · {t.flor ? 'con flor' : 'sin flor'}
                   </span>
+                  <LevelBadge points={hostLevels[t.host_id]?.points ?? 0} />
                 </span>
                 <span className="tag tag-gold">{joining === t.room_id ? '…' : `${t.taken}/${t.players}`}</span>
               </button>
@@ -200,7 +208,6 @@ export default function OnlineHome({ profile, friends, rooms, onNew, onFriends, 
         )}
       </section>
 
-      <p className="hint">Muy pronto: ranking por cartas, del 4 de copas al ancho de espada.</p>
     </main>
   )
 }

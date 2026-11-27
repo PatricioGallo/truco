@@ -11,6 +11,7 @@ import OnlineRoom from './components/OnlineRoom.jsx'
 import Avatar from './components/Avatar.jsx'
 import CpuSetup from './components/CpuSetup.jsx'
 import OnlineHome from './components/OnlineHome.jsx'
+import { RankingScreen, LevelPanel, useMyRating } from './components/Ranking.jsx'
 import { useNotifications, Toast, Bell } from './components/Notifications.jsx'
 
 const LOCAL_NAMES = { 2: ['Vos', 'La compu'], 4: ['Vos', 'Compu 1', 'Compañero', 'Compu 2'] }
@@ -219,8 +220,17 @@ function Main({ profile, setProfile }) {
           onOpenRoom={(id) => go('room', { roomId: id })}
           onJoinCode={async (code) => openRoom(await api.joinRoom({ code }))}
           onJoinTable={async (roomId, partnerId) => openRoom(await api.joinRoom({ roomId, partnerId }))}
+          onRanking={() => go('ranking', { from: 'online' })}
           onBack={() => go('home')}
         />
+      </div>
+    )
+  }
+
+  if (screen.name === 'ranking') {
+    return withToast(
+      <div className="screen">
+        <RankingScreen profile={profile} onBack={() => go(screen.from ?? 'home')} />
       </div>
     )
   }
@@ -228,7 +238,7 @@ function Main({ profile, setProfile }) {
   if (screen.name === 'profile') {
     return withToast(
       <div className="screen">
-        <Profile profile={profile} onChange={setProfile} onBack={() => go('home')} />
+        <Profile profile={profile} onChange={setProfile} onBack={() => go('home')} onRanking={() => go('ranking', { from: 'profile' })} />
       </div>
     )
   }
@@ -333,7 +343,8 @@ function Home({ profile, friends, rooms, local, onCpu, onOnline, onProfile, onOp
   )
 }
 
-function Profile({ profile, onChange, onBack }) {
+function Profile({ profile, onChange, onBack, onRanking }) {
+  const rating = useMyRating(profile.id)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const onPhoto = async (e) => {
@@ -364,6 +375,7 @@ function Profile({ profile, onChange, onBack }) {
       <h2 className="page-title center">{displayName(profile)}</h2>
       <p className="muted center">@{profile.username}</p>
       {msg && <p className="muted center">{msg}</p>}
+      <LevelPanel rating={rating} onOpenRanking={onRanking} />
       <LoginEmail userId={profile.id} />
       <p className="muted small center">Es la misma cuenta que el Sudoku: la foto y el nombre se ven en los dos juegos.</p>
       <button className="btn btn-ghost" onClick={() => api.signOut()}>

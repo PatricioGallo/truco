@@ -26,7 +26,7 @@ function pendingText(h, names) {
   return `${who}: ${what}`
 }
 
-export default function Table({ view, me, actions, names, bubbles, onAct, onNextHand, onRestart, onQuit, onBack, timer }) {
+export default function Table({ view, me, actions, names, bubbles, onAct, onNextHand, onRestart, onQuit, onBack, timer, matchExtra }) {
   const m = view
   const h = m.hand
   const n = m.config.players
@@ -193,7 +193,7 @@ export default function Table({ view, me, actions, names, bubbles, onAct, onNext
       </nav>
 
       {h.finished && m.winner === null && <HandSummary m={m} me={me} names={names} onNext={onNextHand} />}
-      {m.winner !== null && <MatchOver m={m} me={me} onRestart={onRestart} onQuit={onQuit} />}
+      {m.winner !== null && <MatchOver m={m} me={me} onRestart={onRestart} onQuit={onQuit} extra={matchExtra} />}
     </main>
   )
 }
@@ -249,7 +249,7 @@ function HandSummary({ m, me, names, onNext }) {
   )
 }
 
-function MatchOver({ m, me, onRestart, onQuit }) {
+function MatchOver({ m, me, onRestart, onQuit, extra }) {
   const won = m.winner === teamOf(me)
   return (
     <div className="sheet-backdrop">
@@ -258,6 +258,7 @@ function MatchOver({ m, me, onRestart, onQuit }) {
         <p className="final-score">
           {m.score[teamOf(me)]} a {m.score[1 - teamOf(me)]}
         </p>
+        {extra}
         <div className={onRestart ? 'sheet-actions' : 'sheet-actions single'}>
           {onRestart && (
             <button className="btn btn-primary" onClick={onRestart}>

@@ -224,3 +224,66 @@ begin
     alter publication supabase_realtime add table public.truco_lobby;
   end if;
 end $$;
+
+-- Ranking (mesas públicas online) ----------------------------------------------
+-- Lo escribe solo el servidor del juego. El cálculo está en src/server/ranking.js.
+create table if not exists public.truco_ratings (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  points integer not null default 0,        -- puntos visibles: definen la carta/nivel
+  mmr real not null default 1000,           -- nivel real oculto (tipo Elo)
+  games integer not null default 0,
+  wins integer not null default 0,
+  streak integer not null default 0,        -- > 0 victorias seguidas, < 0 derrotas seguidas
+  updated_at timestamptz not null default now()
+);
+create index if not exists truco_ratings_points on public.truco_ratings (points desc);
+
+alter table public.truco_ratings enable row level security;
+drop policy if exists "ver ranking" on public.truco_ratings;
+create policy "ver ranking" on public.truco_ratings
+  for select to authenticated using (true);
+
+-- Historial: una fila por jugador y partida (evita contar dos veces la misma partida)
+create table if not exists public.truco_rating_log (
+  room_id uuid not null references public.truco_rooms (id) on delete cascade,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  delta integer not null,
+  points_after integer not null,
+  level_after integer not null,
+  created_at timestamptz not null default now(),
+  primary key (room_id, user_id)
+);
+create index if not exists truco_rating_log_user on public.truco_rating_log (user_id, created_at desc);
+
+alter table public.truco_rating_log enable row level security;
+drop policy if exists "ver mi historial" on public.truco_rating_log;
+create policy "ver mi historial" on public.truco_rating_log
+  for select to authenticated using (auth.uid() = user_id);
+
+-- Anota los resultados de una partida (solo el servidor). Si ya estaba anotada, no hace nada.
+create or replace function public.truco_apply_ratings(p_room uuid, p_rows jsonb) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r jsonb;
+begin
+  for r in select * from jsonb_array_elements(p_rows) loop
+    insert into truco_rating_log (room_id, user_id, delta, points_after, level_after)
+    values (p_room, (r ->> 'user_id')::uuid, (r ->> 'delta')::int, (r ->> 'points')::int, (r ->> 'level')::int)
+    on conflict do nothing;
+    if found then
+      insert into truco_ratings (user_id, points, mmr, games, wins, streak, updated_at)
+      values ((r ->> 'user_id')::uuid, (r ->> 'points')::int, (r ->> 'mmr')::real, (r ->> 'games')::int,
+              (r ->> 'wins')::int, (r ->> 'streak')::int, now())
+      on conflict (user_id) do update
+        set points = excluded.points, mmr = excluded.mmr, games = excluded.games,
+            wins = excluded.wins, streak = excluded.streak, updated_at = now();
+    end if;
+  end loop;
+end;
+$$;
+
+revoke execute on function public.truco_apply_ratings(uuid, jsonb) from public, anon, authenticated;
+grant execute on function public.truco_apply_ratings(uuid, jsonb) to service_role;
