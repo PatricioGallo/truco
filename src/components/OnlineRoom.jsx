@@ -16,7 +16,7 @@ export default function OnlineRoom({ room, profile, people, onBack, onView, onOp
   const seen = useRef({ handNo: null, len: 0 })
   const [optimistic, setOptimistic] = useState(null) // jugada propia mostrada antes de que conteste el servidor
   const [deadline, setDeadline] = useState(null)
-  const [levels, setLevels] = useState({}) // ranking de quienes están en la mesa
+  const [levels, setLevels] = useState({}) // puntos (y nivel) de quienes están en la mesa
   const userIds = room.seats.filter((s) => s.type === 'user').map((s) => s.userId).join(',')
   useEffect(() => {
     if (room.visibility !== 'public' || !userIds) return
@@ -111,7 +111,7 @@ export default function OnlineRoom({ room, profile, people, onBack, onView, onOp
         <h2 className="page-title">{room.players === 2 ? 'Mano a mano' : 'De a cuatro'}</h2>
         <p className="muted">
           {isPublic ? 'Mesa pública' : 'Mesa privada'} · a {room.target ?? 30} · {room.flor ? 'con flor' : 'sin flor'}
-          {isPublic ? ' · suma al ranking' : ''}
+          {isPublic ? ' · suma puntos' : ''}
         </p>
         <p className="code-line">
           Código de la mesa: <b className="code">{room.code}</b>

@@ -17,14 +17,18 @@ export function LevelBadge({ points = 0, showName = true }) {
   )
 }
 
-/** Mi ranking (se recarga cuando cambia `refresh`). */
+/** Mis puntos, mi nivel y mi posición en el ranking mundial (se recarga cuando cambia `refresh`). */
 export function useMyRating(userId, refresh) {
   const [rating, setRating] = useState(null)
   useEffect(() => {
     let alive = true
     api
       .ratingsByIds([userId])
-      .then((r) => alive && setRating(r[userId] ?? { points: 0, games: 0, wins: 0, streak: 0 }))
+      .then(async (r) => {
+        const mine = r[userId] ?? { points: 0, games: 0, wins: 0, streak: 0 }
+        const pos = mine.games ? await api.rankPosition(mine.points) : null
+        if (alive) setRating({ ...mine, pos })
+      })
       .catch(() => {})
     return () => {
       alive = false
@@ -43,7 +47,10 @@ export function LevelPanel({ rating, onOpenRanking }) {
       <div className="level-info">
         <span className="muted small">Nivel {lv.level} de {LEVEL_CARDS.length}</span>
         <b className="level-name">{lv.card.name}</b>
-        <span className="level-points">{rating.points} puntos</span>
+        <span className="level-points">
+          {rating.points} puntos
+          {rating.pos ? <span className="world-chip">🌎 Ranking mundial #{rating.pos}</span> : null}
+        </span>
         {lv.next !== null ? (
           <>
             <span className="level-bar">
@@ -61,13 +68,13 @@ export function LevelPanel({ rating, onOpenRanking }) {
             ? '🔒 Perfil privado'
             : rating.games
               ? `${rating.wins} ganadas de ${rating.games}`
-              : 'Jugá mesas públicas para entrar al ranking'}
+              : 'Jugá mesas públicas para sumar puntos y subir de nivel'}
           {rating.streak >= 3 ? ` · racha de ${rating.streak} 🔥` : ''}
         </span>
       </div>
       {onOpenRanking && (
         <button className="btn btn-ghost btn-small level-more" onClick={onOpenRanking}>
-          Ver ranking
+          Ver ranking mundial
         </button>
       )}
     </section>
@@ -110,7 +117,7 @@ export function RankingScreen({ profile, onBack, onOpenPlayer }) {
       <button className="back" onClick={onBack}>
         ‹ Volver
       </button>
-      <h2 className="page-title">Ranking</h2>
+      <h2 className="page-title">Ranking mundial</h2>
       <LevelPanel rating={me} />
       <div className="segmented" role="tablist">
         <button role="tab" aria-selected={tab === 'ranking'} onClick={() => setTab('ranking')}>
@@ -172,14 +179,15 @@ export function RankingScreen({ profile, onBack, onOpenPlayer }) {
         </ol>
       )}
       <p className="hint">
-        Suman las mesas públicas online. A 30 vale más que a 15. Si ganás seguido o jugás mejor que tu carta, subís más
-        rápido.
+        El <b>ranking</b> es tu posición entre todos los jugadores del mundo, ordenados por puntos. El <b>nivel</b> es tu
+        carta, del 4 de copas al ancho de espada, y depende solo de tus puntos. Los puntos se ganan en las mesas públicas
+        online: a 30 valen más que a 15, y si ganás seguido o jugás mejor que tu carta, sumás más.
       </p>
     </main>
   )
 }
 
-/** Resultado de ranking al terminar una partida pública (lo busca hasta que el servidor lo anota). */
+/** Puntos ganados o perdidos al terminar una partida pública (los busca hasta que el servidor los anota). */
 export function RatingResult({ roomId, userId }) {
   const [change, setChange] = useState(undefined)
   useEffect(() => {
@@ -199,20 +207,20 @@ export function RatingResult({ roomId, userId }) {
       alive = false
     }
   }, [roomId, userId])
-  if (change === undefined) return <p className="muted small">Calculando ranking…</p>
-  if (!change) return <p className="muted small">Esta partida no cambió tu ranking.</p>
+  if (change === undefined) return <p className="muted small">Calculando puntos…</p>
+  if (!change) return <p className="muted small">Esta partida no sumó ni restó puntos.</p>
   const lv = levelOf(change.points_after)
   const before = levelOf(change.points_after - change.delta)
   return (
     <div className="rating-result">
       <b className={change.delta >= 0 ? 'good' : 'bad'}>
         {change.delta >= 0 ? '+' : ''}
-        {change.delta} puntos de ranking
+        {change.delta} puntos
       </b>
       <span className="level-badge">
         <Card id={lv.card.id} size="lvl" />
         <span>
-          {lv.level > before.level ? '¡Subiste a ' : lv.level < before.level ? 'Bajaste a ' : ''}
+          {lv.level > before.level ? '¡Subiste de nivel: ' : lv.level < before.level ? 'Bajaste de nivel: ' : 'Nivel: '}
           {lv.card.name}
           {lv.level !== before.level ? (lv.level > before.level ? '!' : '') : ''} · {change.points_after} pts
         </span>
@@ -221,7 +229,7 @@ export function RatingResult({ roomId, userId }) {
   )
 }
 
-/** Tarjeta del inicio: mi nivel y puesto, y los tres primeros del ranking. */
+/** Tarjeta del inicio: mi nivel (carta), mi posición en el ranking mundial y los tres primeros del mundo. */
 export function HomeRanking({ profile, refresh, onOpen, onOpenPlayer }) {
   const [top, setTop] = useState(null)
   const [people, setPeople] = useState({})
@@ -255,15 +263,18 @@ export function HomeRanking({ profile, refresh, onOpen, onOpenPlayer }) {
       <button className="home-ranking-me" onClick={onOpen}>
         <Card id={lv.card.id} size="sm" />
         <span className="person-text">
-          <span className="muted small">Tu ranking</span>
+          <span className="muted small">Tu nivel</span>
           <b className="level-name">{lv.card.name}</b>
-          <span className="level-points">
-            {me?.points ?? 0} pts{me?.pos ? ` · puesto #${me.pos}` : ''}
-          </span>
+          <span className="level-points">{me?.points ?? 0} puntos</span>
         </span>
-        <span className="category-arrow" aria-hidden="true">›</span>
+        <span className="world-rank">
+          <span className="muted small">Ranking mundial</span>
+          <b>{me?.pos ? `#${me.pos}` : '—'}</b>
+        </span>
       </button>
       {top?.length > 0 && (
+        <>
+        <p className="home-top3-title muted small">🌎 Los mejores del mundo</p>
         <ol className="home-top3">
           {top.map((r, i) => (
             <li key={r.user_id}>
@@ -276,6 +287,7 @@ export function HomeRanking({ profile, refresh, onOpen, onOpenPlayer }) {
             </li>
           ))}
         </ol>
+        </>
       )}
     </section>
   )

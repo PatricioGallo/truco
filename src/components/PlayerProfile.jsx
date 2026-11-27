@@ -7,7 +7,7 @@ import { LevelPanel } from './Ranking.jsx'
 
 const EMPTY = { points: 0, games: 0, wins: 0, streak: 0 }
 
-/** Ranking y puesto de un jugador. */
+/** Puntos, nivel, estadísticas y posición en el ranking mundial de un jugador. */
 export function usePlayerStats(userId, refresh) {
   const [stats, setStats] = useState(null)
   useEffect(() => {
@@ -28,7 +28,7 @@ export function usePlayerStats(userId, refresh) {
   return stats
 }
 
-/** Partidas, ganadas, perdidas, efectividad, racha y puesto. */
+/** Partidas, ganadas, perdidas, efectividad, racha y ranking mundial. */
 export function StatsGrid({ stats }) {
   if (!stats) return <p className="muted small center">Cargando estadísticas…</p>
   if (stats.games === null)
@@ -45,7 +45,7 @@ export function StatsGrid({ stats }) {
     ['Perdidas', lost],
     ['Efectividad', stats.games ? `${pct}%` : '—'],
     [stats.streak > 0 ? 'Ganando seguidas' : stats.streak < 0 ? 'Perdiendo seguidas' : 'Racha', stats.streak ? Math.abs(stats.streak) : '—'],
-    ['Puesto', stats.pos ? `#${stats.pos}` : '—'],
+    ['Ranking mundial', stats.pos ? `#${stats.pos}` : '—'],
   ]
   return (
     <section className="stats-grid" aria-label="Estadísticas online">

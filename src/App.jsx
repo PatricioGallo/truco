@@ -307,7 +307,7 @@ function Home({ profile, friends, rooms, local, onCpu, onOnline, onRanking, onOp
     ? `${playing} ${playing === 1 ? 'partida' : 'partidas'} en curso`
     : friends.incoming.length
       ? `${friends.incoming.length} ${friends.incoming.length === 1 ? 'pedido' : 'pedidos'} de amistad`
-      : 'Mesas con otros jugadores. Suma al ranking'
+      : 'Mesas con otros jugadores. Suman puntos'
 
   return (
     <main className="home">
