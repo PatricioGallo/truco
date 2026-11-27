@@ -4,7 +4,7 @@ import { displayName } from '../api/shared.js'
 import Avatar from './Avatar.jsx'
 
 /** Buscador de jugadores, pedidos de amistad y lista de amigos. */
-export default function Friends({ profile, data, reload, onPlayWith, onBack }) {
+export default function Friends({ profile, data, reload, onPlayWith, onOpenPlayer, onBack }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [busy, setBusy] = useState(null)
@@ -76,9 +76,11 @@ export default function Friends({ profile, data, reload, onPlayWith, onBack }) {
                 const incoming = data.incoming.find((f) => f.profile.id === p.id)
                 return (
                   <li key={p.id} className="person">
-                    <Avatar profile={p} size={40} />
+                    <button className="person-open" onClick={() => onOpenPlayer?.(p.id)} aria-label={`Ver perfil de ${displayName(p)}`}>
+                      <Avatar profile={p} size={40} />
+                    </button>
                     <span className="person-text">
-                      <b>{displayName(p)}</b>
+                      <b className="person-link" onClick={() => onOpenPlayer?.(p.id)}>{displayName(p)}</b>
                       <span className="muted">@{p.username}</span>
                     </span>
                     {rel === 'none' && (
@@ -114,9 +116,11 @@ export default function Friends({ profile, data, reload, onPlayWith, onBack }) {
           <ul className="people">
             {data.incoming.map(({ friendshipId, profile: p }) => (
               <li key={friendshipId} className="person">
-                <Avatar profile={p} size={40} />
+                <button className="person-open" onClick={() => onOpenPlayer?.(p.id)} aria-label={`Ver perfil de ${displayName(p)}`}>
+                      <Avatar profile={p} size={40} />
+                    </button>
                 <span className="person-text">
-                  <b>{displayName(p)}</b>
+                  <b className="person-link" onClick={() => onOpenPlayer?.(p.id)}>{displayName(p)}</b>
                   <span className="muted">@{p.username}</span>
                 </span>
                 <span className="person-actions">
@@ -149,9 +153,11 @@ export default function Friends({ profile, data, reload, onPlayWith, onBack }) {
           <ul className="people">
             {data.friends.map(({ friendshipId, profile: p }) => (
               <li key={friendshipId} className="person">
-                <Avatar profile={p} size={40} />
+                <button className="person-open" onClick={() => onOpenPlayer?.(p.id)} aria-label={`Ver perfil de ${displayName(p)}`}>
+                      <Avatar profile={p} size={40} />
+                    </button>
                 <span className="person-text">
-                  <b>{displayName(p)}</b>
+                  <b className="person-link" onClick={() => onOpenPlayer?.(p.id)}>{displayName(p)}</b>
                   <span className="muted">@{p.username}</span>
                 </span>
                 <button className="btn btn-small btn-truco" onClick={() => onPlayWith(p)}>

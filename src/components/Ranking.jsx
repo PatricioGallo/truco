@@ -4,6 +4,7 @@ import { levelOf, LEVEL_CARDS, LEVEL_MIN } from '../server/ranking.js'
 import { displayName } from '../api/shared.js'
 import Card from './Card.jsx'
 import Avatar from './Avatar.jsx'
+import { flagOf } from '../countries.js'
 
 /** Carta de nivel chiquita con el nombre (para listas y mesas). */
 export function LevelBadge({ points = 0, showName = true }) {
@@ -70,7 +71,7 @@ export function LevelPanel({ rating, onOpenRanking }) {
 }
 
 /** Tabla de posiciones. */
-export function RankingScreen({ profile, onBack }) {
+export function RankingScreen({ profile, onBack, onOpenPlayer }) {
   const [rows, setRows] = useState(null)
   const [people, setPeople] = useState({})
   const [me, setMe] = useState(null)
@@ -137,24 +138,31 @@ export function RankingScreen({ profile, onBack }) {
         <ol className="ranking-list">
           {rows.map((r, i) => (
             <li key={r.user_id} className={r.user_id === profile.id ? 'is-me' : ''}>
-              <span className="rank-pos">{i + 1}</span>
-              <Avatar profile={people[r.user_id] ?? { username: '?' }} size={36} />
-              <span className="person-text">
-                <b>{r.user_id === profile.id ? 'Vos' : people[r.user_id] ? displayName(people[r.user_id]) : 'Jugador'}</b>
-                <LevelBadge points={r.points} />
-              </span>
-              <span className="rank-points">{r.points}</span>
+              <button className="rank-row" onClick={() => onOpenPlayer?.(r.user_id)}>
+                <span className="rank-pos">{i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}</span>
+                <Avatar profile={people[r.user_id] ?? { username: '?' }} size={36} />
+                <span className="person-text">
+                  <b>
+                    {r.user_id === profile.id ? 'Vos' : people[r.user_id] ? displayName(people[r.user_id]) : 'Jugador'}{' '}
+                    {flagOf(people[r.user_id]?.country)}
+                  </b>
+                  <LevelBadge points={r.points} />
+                </span>
+                <span className="rank-points">{r.points}</span>
+              </button>
             </li>
           ))}
           {!inTop && me?.pos && (
             <li className="is-me">
-              <span className="rank-pos">{me.pos}</span>
-              <Avatar profile={profile} size={36} />
-              <span className="person-text">
-                <b>Vos</b>
-                <LevelBadge points={me.points} />
-              </span>
-              <span className="rank-points">{me.points}</span>
+              <button className="rank-row" onClick={() => onOpenPlayer?.(profile.id)}>
+                <span className="rank-pos">{me.pos}</span>
+                <Avatar profile={profile} size={36} />
+                <span className="person-text">
+                  <b>Vos {flagOf(profile.country)}</b>
+                  <LevelBadge points={me.points} />
+                </span>
+                <span className="rank-points">{me.points}</span>
+              </button>
             </li>
           )}
         </ol>
@@ -206,5 +214,65 @@ export function RatingResult({ roomId, userId }) {
         </span>
       </span>
     </div>
+  )
+}
+
+/** Tarjeta del inicio: mi nivel y puesto, y los tres primeros del ranking. */
+export function HomeRanking({ profile, refresh, onOpen, onOpenPlayer }) {
+  const [top, setTop] = useState(null)
+  const [people, setPeople] = useState({})
+  const [me, setMe] = useState(null)
+  useEffect(() => {
+    let alive = true
+    api
+      .leaderboard(3)
+      .then(async (list) => {
+        if (!alive) return
+        setTop(list)
+        const ps = await api.profilesByIds(list.map((r) => r.user_id))
+        if (alive) setPeople(Object.fromEntries(ps.map((p) => [p.id, p])))
+      })
+      .catch(() => alive && setTop([]))
+    api
+      .ratingsByIds([profile.id])
+      .then(async (r) => {
+        const mine = r[profile.id] ?? { points: 0, games: 0 }
+        const pos = mine.games ? await api.rankPosition(mine.points) : null
+        if (alive) setMe({ ...mine, pos })
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [profile.id, refresh])
+  const lv = levelOf(me?.points ?? 0)
+  return (
+    <section className="home-ranking">
+      <button className="home-ranking-me" onClick={onOpen}>
+        <Card id={lv.card.id} size="sm" />
+        <span className="person-text">
+          <span className="muted small">Tu ranking</span>
+          <b className="level-name">{lv.card.name}</b>
+          <span className="level-points">
+            {me?.points ?? 0} pts{me?.pos ? ` · puesto #${me.pos}` : ''}
+          </span>
+        </span>
+        <span className="category-arrow" aria-hidden="true">›</span>
+      </button>
+      {top?.length > 0 && (
+        <ol className="home-top3">
+          {top.map((r, i) => (
+            <li key={r.user_id}>
+              <button onClick={() => onOpenPlayer(r.user_id)}>
+                <span>{['🥇', '🥈', '🥉'][i]}</span>
+                <Avatar profile={people[r.user_id] ?? { username: '?' }} size={28} />
+                <b>{r.user_id === profile.id ? 'Vos' : people[r.user_id] ? people[r.user_id].first_name || people[r.user_id].username : '…'}</b>
+                <span className="muted">{r.points}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   )
 }

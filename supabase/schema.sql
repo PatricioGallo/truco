@@ -287,3 +287,6 @@ $$;
 
 revoke execute on function public.truco_apply_ratings(uuid, jsonb) from public, anon, authenticated;
 grant execute on function public.truco_apply_ratings(uuid, jsonb) to service_role;
+
+-- Nacionalidad en el perfil (compartido con el Sudoku; opcional) ----------------
+alter table public.profiles add column if not exists country text check (country is null or country ~ '^[A-Z]{2}$');

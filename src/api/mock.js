@@ -96,6 +96,14 @@ export async function profilesByIds(ids) {
   const d = db()
   return ids.map((id) => d.profiles[id]).filter(Boolean)
 }
+export async function updateMyProfile(id, { first_name, last_name, country }) {
+  await net()
+  const d = db()
+  const clean = (x) => (x ?? '').trim() || null
+  d.profiles[id] = { ...d.profiles[id], first_name: clean(first_name), last_name: clean(last_name), country: country || null }
+  save(d)
+  return d.profiles[id]
+}
 export async function uploadAvatar(id, file) {
   await net()
   const blob = await resizeImage(file)

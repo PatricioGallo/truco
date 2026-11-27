@@ -11,7 +11,9 @@ import OnlineRoom from './components/OnlineRoom.jsx'
 import Avatar from './components/Avatar.jsx'
 import CpuSetup from './components/CpuSetup.jsx'
 import OnlineHome from './components/OnlineHome.jsx'
-import { RankingScreen, LevelPanel, useMyRating } from './components/Ranking.jsx'
+import { RankingScreen, LevelPanel, HomeRanking } from './components/Ranking.jsx'
+import PlayerProfile, { PlayerHeader, StatsGrid, usePlayerStats } from './components/PlayerProfile.jsx'
+import { COUNTRIES, flagOf } from './countries.js'
 import { useNotifications, Toast, Bell } from './components/Notifications.jsx'
 
 const LOCAL_NAMES = { 2: ['Vos', 'La compu'], 4: ['Vos', 'Compu 1', 'Compañero', 'Compu 2'] }
@@ -68,6 +70,7 @@ function Splash() {
 function Main({ profile, setProfile }) {
   const [screen, setScreen] = useState({ name: 'home' })
   const go = (name, extra = {}) => setScreen({ name, ...extra })
+  const openPlayer = (userId) => setScreen((s) => ({ name: 'player', userId, back: s }))
 
   // Partida contra la compu (se guarda en el celular)
   const [initialLocal] = useState(() => savedLocalMatch()?.match ?? null)
@@ -162,6 +165,7 @@ function Main({ profile, setProfile }) {
           profile={profile}
           people={people}
           onView={upsertRoom}
+          onOpenPlayer={openPlayer}
           onBack={() => go('online')}
         />
       </div>
@@ -176,6 +180,7 @@ function Main({ profile, setProfile }) {
           data={friends}
           reload={reloadFriends}
           onPlayWith={(p) => go('new', { preset: p })}
+          onOpenPlayer={openPlayer}
           onBack={() => go('online')}
         />
       </div>
@@ -227,10 +232,26 @@ function Main({ profile, setProfile }) {
     )
   }
 
+  if (screen.name === 'player') {
+    return withToast(
+      <div className="screen">
+        <PlayerProfile
+          key={screen.userId}
+          userId={screen.userId}
+          me={profile}
+          friends={friends}
+          reloadFriends={reloadFriends}
+          onPlayWith={(p) => go('new', { preset: p })}
+          onBack={() => setScreen(screen.back ?? { name: 'home' })}
+        />
+      </div>
+    )
+  }
+
   if (screen.name === 'ranking') {
     return withToast(
       <div className="screen">
-        <RankingScreen profile={profile} onBack={() => go(screen.from ?? 'home')} />
+        <RankingScreen profile={profile} onOpenPlayer={openPlayer} onBack={() => go(screen.from ?? 'home')} />
       </div>
     )
   }
@@ -252,6 +273,8 @@ function Main({ profile, setProfile }) {
         local={local}
         onCpu={() => go('cpu')}
         onOnline={() => go('online')}
+        onRanking={() => go('ranking', { from: 'home' })}
+        onOpenPlayer={openPlayer}
         onProfile={() => go('profile')}
         onOpenRoom={(id) => go('room', { roomId: id })}
         people={people}
@@ -262,7 +285,7 @@ function Main({ profile, setProfile }) {
   )
 }
 
-function Home({ profile, friends, rooms, local, onCpu, onOnline, onProfile, onOpenRoom, people, notif, notifHandlers }) {
+function Home({ profile, friends, rooms, local, onCpu, onOnline, onRanking, onOpenPlayer, onProfile, onOpenRoom, people, notif, notifHandlers }) {
   const invites = rooms.filter((r) => r.status === 'waiting' && r.seats[r.mySeat]?.type === 'user' && !r.seats[r.mySeat].joined)
   const playing = rooms.filter((r) => r.status === 'playing').length
   const hostName = (r) => {
@@ -306,6 +329,13 @@ function Home({ profile, friends, rooms, local, onCpu, onOnline, onProfile, onOp
         </section>
       )}
 
+      <HomeRanking
+        profile={profile}
+        refresh={rooms.filter((r) => r.status === 'finished').length}
+        onOpen={onRanking}
+        onOpenPlayer={onOpenPlayer}
+      />
+
       <nav className="categories">
         <button className="category" onClick={onCpu}>
           <span className="category-icon" aria-hidden="true">🤖</span>
@@ -344,7 +374,7 @@ function Home({ profile, friends, rooms, local, onCpu, onOnline, onProfile, onOp
 }
 
 function Profile({ profile, onChange, onBack, onRanking }) {
-  const rating = useMyRating(profile.id)
+  const stats = usePlayerStats(profile.id)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const onPhoto = async (e) => {
@@ -372,10 +402,11 @@ function Profile({ profile, onChange, onBack, onRanking }) {
         <span className="photo-badge">{busy ? '…' : '📷'}</span>
         <input type="file" accept="image/*" hidden onChange={onPhoto} />
       </label>
-      <h2 className="page-title center">{displayName(profile)}</h2>
-      <p className="muted center">@{profile.username}</p>
+      <PlayerHeader profile={profile} hideAvatar />
       {msg && <p className="muted center">{msg}</p>}
-      <LevelPanel rating={rating} onOpenRanking={onRanking} />
+      <LevelPanel rating={stats} onOpenRanking={onRanking} />
+      <StatsGrid stats={stats} />
+      <EditProfile profile={profile} onChange={onChange} />
       <LoginEmail userId={profile.id} />
       <p className="muted small center">Es la misma cuenta que el Sudoku: la foto y el nombre se ven en los dos juegos.</p>
       <button className="btn btn-ghost" onClick={() => api.signOut()}>
@@ -393,6 +424,67 @@ function Profile({ profile, onChange, onBack, onRanking }) {
         . Adaptados a imágenes livianas.
       </p>
     </main>
+  )
+}
+
+// Nombre, apellido y nacionalidad (los mismos datos que usa el Sudoku)
+function EditProfile({ profile, onChange }) {
+  const [form, setForm] = useState({
+    first_name: profile.first_name ?? '',
+    last_name: profile.last_name ?? '',
+    country: profile.country ?? '',
+  })
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const changed =
+    form.first_name.trim() !== (profile.first_name ?? '') ||
+    form.last_name.trim() !== (profile.last_name ?? '') ||
+    form.country !== (profile.country ?? '')
+  const submit = async (e) => {
+    e.preventDefault()
+    setBusy(true)
+    setMsg('')
+    try {
+      onChange(await api.updateMyProfile(profile.id, form))
+      setMsg('Datos guardados.')
+    } catch (err) {
+      setMsg(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <form className="login-form panel" onSubmit={submit}>
+      <h3>Tus datos</h3>
+      <div className="field-row">
+        <label className="field">
+          <span>Nombre</span>
+          <input value={form.first_name} onChange={set('first_name')} maxLength={40} autoComplete="given-name" />
+        </label>
+        <label className="field">
+          <span>Apellido</span>
+          <input value={form.last_name} onChange={set('last_name')} maxLength={40} autoComplete="family-name" />
+        </label>
+      </div>
+      <label className="field">
+        <span>Nacionalidad</span>
+        <select value={form.country} onChange={set('country')}>
+          <option value="">Sin elegir</option>
+          {COUNTRIES.map(([code, name]) => (
+            <option key={code} value={code}>
+              {flagOf(code)} {name}
+            </option>
+          ))}
+        </select>
+      </label>
+      {msg && <p className="muted small center">{msg}</p>}
+      {changed && (
+        <button className="btn btn-primary" disabled={busy}>
+          {busy ? 'Guardando…' : 'Guardar'}
+        </button>
+      )}
+    </form>
   )
 }
 

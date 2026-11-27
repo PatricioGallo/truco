@@ -99,7 +99,7 @@ export async function getProfile(id) {
 }
 export async function profilesByIds(ids) {
   if (!ids.length) return []
-  return check(await sb.from('profiles').select('id, username, first_name, last_name, avatar_url').in('id', ids))
+  return check(await sb.from('profiles').select('id, username, first_name, last_name, avatar_url, country').in('id', ids))
 }
 export async function uploadAvatar(userId, file) {
   const blob = await resizeImage(file)
@@ -107,6 +107,19 @@ export async function uploadAvatar(userId, file) {
   check(await sb.storage.from('avatars').upload(path, blob, { upsert: true, contentType: 'image/jpeg' }))
   const url = `${sb.storage.from('avatars').getPublicUrl(path).data.publicUrl}?v=${Date.now()}`
   return check(await sb.from('profiles').update({ avatar_url: url }).eq('id', userId).select().single())
+}
+
+/** Edita mis datos: nombre, apellido y nacionalidad (código de país o null). */
+export async function updateMyProfile(userId, { first_name, last_name, country }) {
+  const clean = (x) => (x ?? '').trim() || null
+  return check(
+    await sb
+      .from('profiles')
+      .update({ first_name: clean(first_name), last_name: clean(last_name), country: country || null })
+      .eq('id', userId)
+      .select()
+      .single()
+  )
 }
 
 // ---------- Amigos ----------

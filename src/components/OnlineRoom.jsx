@@ -9,7 +9,7 @@ import Avatar from './Avatar.jsx'
 import { LevelBadge, RatingResult } from './Ranking.jsx'
 
 /** Sala online: espera de jugadores y mesa. `room` es mi vista (llega en tiempo real). */
-export default function OnlineRoom({ room, profile, people, onBack, onView }) {
+export default function OnlineRoom({ room, profile, people, onBack, onView, onOpenPlayer }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [bubbles, setBubbles] = useState({})
@@ -119,7 +119,14 @@ export default function OnlineRoom({ room, profile, people, onBack, onView }) {
         <ul className="lobby-seats">
           {room.seats.map((s, i) => (
             <li key={i} className="lobby-seat">
-              <Avatar profile={s.type === 'user' ? people[s.userId] : { username: s.type === 'cpu' ? 'compu' : '?' }} size={38} />
+              <button
+                className="person-open"
+                disabled={s.type !== 'user'}
+                onClick={() => onOpenPlayer?.(s.userId)}
+                aria-label="Ver perfil"
+              >
+                <Avatar profile={s.type === 'user' ? people[s.userId] : { username: s.type === 'cpu' ? 'compu' : '?' }} size={38} />
+              </button>
               <span className="person-text">
                 <b>{i === room.mySeat ? 'Vos' : s.type === 'cpu' ? 'La compu' : s.type === 'open' ? 'Lugar libre' : displayName(people[s.userId])}</b>
                 <span className="muted">
