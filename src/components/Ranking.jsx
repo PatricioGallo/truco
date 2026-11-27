@@ -17,7 +17,7 @@ export function LevelBadge({ points = 0, showName = true }) {
   )
 }
 
-/** Mis puntos, mi nivel y mi posición en el ranking mundial (se recarga cuando cambia `refresh`). */
+/** Mis puntos, mi nivel y mi posición en el ranking (se recarga cuando cambia `refresh`). */
 export function useMyRating(userId, refresh) {
   const [rating, setRating] = useState(null)
   useEffect(() => {
@@ -49,7 +49,7 @@ export function LevelPanel({ rating, onOpenRanking }) {
         <b className="level-name">{lv.card.name}</b>
         <span className="level-points">
           {rating.points} puntos
-          {rating.pos ? <span className="world-chip">🌎 Ranking mundial #{rating.pos}</span> : null}
+          {rating.pos ? <span className="world-chip">🌎 Ranking #{rating.pos}</span> : null}
         </span>
         {lv.next !== null ? (
           <>
@@ -74,7 +74,7 @@ export function LevelPanel({ rating, onOpenRanking }) {
       </div>
       {onOpenRanking && (
         <button className="btn btn-ghost btn-small level-more" onClick={onOpenRanking}>
-          Ver ranking mundial
+          Ver ranking
         </button>
       )}
     </section>
@@ -117,7 +117,7 @@ export function RankingScreen({ profile, onBack, onOpenPlayer }) {
       <button className="back" onClick={onBack}>
         ‹ Volver
       </button>
-      <h2 className="page-title">Ranking mundial</h2>
+      <h2 className="page-title">Ranking</h2>
       <LevelPanel rating={me} />
       <div className="segmented" role="tablist">
         <button role="tab" aria-selected={tab === 'ranking'} onClick={() => setTab('ranking')}>
@@ -229,7 +229,7 @@ export function RatingResult({ roomId, userId }) {
   )
 }
 
-/** Tarjeta del inicio: mi nivel (carta), mi posición en el ranking mundial y los tres primeros del mundo. */
+/** Tarjeta del inicio: mi nivel (carta), mi posición en el ranking y los tres primeros del mundo. */
 export function HomeRanking({ profile, refresh, onOpen, onOpenPlayer }) {
   const [top, setTop] = useState(null)
   const [people, setPeople] = useState({})
@@ -237,7 +237,7 @@ export function HomeRanking({ profile, refresh, onOpen, onOpenPlayer }) {
   useEffect(() => {
     let alive = true
     api
-      .leaderboard(3)
+      .leaderboard(5)
       .then(async (list) => {
         if (!alive) return
         setTop(list)
@@ -268,27 +268,51 @@ export function HomeRanking({ profile, refresh, onOpen, onOpenPlayer }) {
           <span className="level-points">{me?.points ?? 0} puntos</span>
         </span>
         <span className="world-rank">
-          <span className="muted small">Ranking mundial</span>
+          <span className="muted small">Ranking</span>
           <b>{me?.pos ? `#${me.pos}` : '—'}</b>
         </span>
       </button>
-      {top?.length > 0 && (
-        <>
-        <p className="home-top3-title muted small">🌎 Los mejores del mundo</p>
-        <ol className="home-top3">
+      <h2 className="home-rank-title">🌎 Ranking</h2>
+      {top === null ? (
+        <p className="muted small">Cargando…</p>
+      ) : top.length === 0 ? (
+        <p className="muted small">Todavía nadie jugó mesas públicas. ¡Jugá una y estrená el ranking!</p>
+      ) : (
+        <ol className="ranking-list home-rank-list">
           {top.map((r, i) => (
-            <li key={r.user_id}>
-              <button onClick={() => onOpenPlayer(r.user_id)}>
-                <span>{['🥇', '🥈', '🥉'][i]}</span>
-                <Avatar profile={people[r.user_id] ?? { username: '?' }} size={28} />
-                <b>{r.user_id === profile.id ? 'Vos' : people[r.user_id] ? people[r.user_id].first_name || people[r.user_id].username : '…'}</b>
-                <span className="muted">{r.points}</span>
+            <li key={r.user_id} className={r.user_id === profile.id ? 'is-me' : ''}>
+              <button className="rank-row" onClick={() => onOpenPlayer(r.user_id)}>
+                <span className="rank-pos">{i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}</span>
+                <Avatar profile={people[r.user_id] ?? { username: '?' }} size={32} />
+                <span className="person-text">
+                  <b>
+                    {r.user_id === profile.id ? 'Vos' : people[r.user_id] ? displayName(people[r.user_id]) : 'Jugador'}{' '}
+                    {flagOf(r.country)}
+                  </b>
+                  <LevelBadge points={r.points} />
+                </span>
+                <span className="rank-points">{r.points}</span>
               </button>
             </li>
           ))}
+          {me?.pos > top.length && (
+            <li className="is-me">
+              <button className="rank-row" onClick={() => onOpenPlayer(profile.id)}>
+                <span className="rank-pos">{me.pos}</span>
+                <Avatar profile={profile} size={32} />
+                <span className="person-text">
+                  <b>Vos</b>
+                  <LevelBadge points={me.points} />
+                </span>
+                <span className="rank-points">{me.points}</span>
+              </button>
+            </li>
+          )}
         </ol>
-        </>
       )}
+      <button className="btn btn-ghost btn-small" onClick={onOpen}>
+        Ver ranking completo
+      </button>
     </section>
   )
 }

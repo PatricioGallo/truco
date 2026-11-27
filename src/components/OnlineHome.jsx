@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import * as api from '@api'
 import { displayName } from '../api/shared.js'
 import Avatar from './Avatar.jsx'
-import { LevelBadge, LevelPanel, useMyRating } from './Ranking.jsx'
+import { LevelBadge } from './Ranking.jsx'
 
 /** Mesas públicas esperando gente (se actualiza sola). */
 function useOpenTables() {
@@ -48,7 +48,6 @@ export default function OnlineHome({ profile, friends, rooms, onNew, onFriends, 
   const [joinError, setJoinError] = useState('')
   const [partner, setPartner] = useState('') // amigo con quien sumarse en dupla
   const { tables, hosts, hostLevels } = useOpenTables()
-  const myRating = useMyRating(profile.id, rooms.filter((r) => r.status === 'finished').length)
   const mine = new Set(rooms.map((r) => r.id))
   const visible = (tables ?? []).filter(
     (t) =>
@@ -77,7 +76,6 @@ export default function OnlineHome({ profile, friends, rooms, onNew, onFriends, 
         ‹ Volver
       </button>
       <h2 className="page-title">Online</h2>
-      <LevelPanel rating={myRating} onOpenRanking={onRanking} />
 
       {active.length > 0 && (
         <section className="block">

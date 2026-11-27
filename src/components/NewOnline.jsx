@@ -72,7 +72,7 @@ export default function NewOnline({ friends, preset, onCreate, onBack }) {
       />
       <p className="muted small">
         {isPublic
-          ? 'Aparece en la lista de mesas abiertas y se suma cualquiera. Arranca cuando se llena y suma puntos para tu nivel y el ranking mundial.'
+          ? 'Aparece en la lista de mesas abiertas y se suma cualquiera. Arranca cuando se llena y suma puntos para tu nivel y el ranking.'
           : 'Solo para tus amigos o quien tenga el código. Podés completar con la compu. No suma puntos.'}
       </p>
 
