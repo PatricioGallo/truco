@@ -2,7 +2,10 @@
 // (sus cartas, las jugadas y los cantos): nunca mira las cartas ajenas.
 
 import { parseCard, rank, envidoPoints, hasFlor, florPoints } from './cards.js'
-import { legalActions, teamOf } from './game.js'
+import { legalActions, teamOf, handWinner } from './game.js'
+
+/** Niveles de la compu. */
+export const LEVELS = ['facil', 'normal', 'dificil']
 
 const strength = (id) => (rank(parseCard(id)) - 1) / 13 // 0 (un 4) a 1 (ancho de espada)
 
@@ -24,6 +27,81 @@ function trucoChance(m, seat) {
     est += mine.some((c) => rank(parseCard(c)) > top) ? 0.15 : -0.2
   }
   return Math.max(0, Math.min(1, est))
+}
+
+// ---------------------------------------------------------------------------
+// Dificultad difícil: en vez de estimar a ojo, simula muchas veces cómo puede
+// terminar la mano repartiendo al azar las cartas que todavía no vio.
+// ---------------------------------------------------------------------------
+
+const ALL_IDS = ['espada', 'basto', 'oro', 'copa'].flatMap((s) => [1, 2, 3, 4, 5, 6, 7, 10, 11, 12].map((n) => `${n}${s[0]}`))
+const rankOf = (id) => rank(parseCard(id))
+
+/** Juega una baza con criterio simple: matar con la más baja que alcance o tirar la más baja. */
+function greedyCard(hand, plays, seat, roundNo) {
+  const sorted = hand.slice().sort((a, b) => rankOf(a) - rankOf(b))
+  if (!plays.length) return roundNo === 0 && sorted.length === 3 ? sorted[1] : sorted[sorted.length - 1]
+  const top = Math.max(...plays.map((p) => rankOf(p.card)))
+  const mineTop = plays.some((p) => teamOf(p.seat) === teamOf(seat) && rankOf(p.card) === top)
+  if (mineTop) return sorted[0]
+  return sorted.find((c) => rankOf(c) > top) ?? sorted[0]
+}
+
+/** Probabilidad (0 a 1) de que el equipo de `seat` gane la mano jugándola hasta el final. */
+export function simulatedChance(m, seat, random = Math.random, samples = 80) {
+  const h = m.hand
+  const n = m.config.players
+  const seen = new Set([...h.initial[seat], ...h.rounds.flatMap((r) => r.plays.map((p) => p.card))])
+  const pool = ALL_IDS.filter((id) => !seen.has(id))
+  const team = teamOf(seat)
+  let wins = 0
+  for (let k = 0; k < samples; k++) {
+    // Reparto al azar de las cartas que no veo
+    const deck = pool.slice()
+    for (let i = deck.length - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1))
+      ;[deck[i], deck[j]] = [deck[j], deck[i]]
+    }
+    const hands = h.cards.map((c, s) => (s === seat ? c.slice() : c.map(() => deck.pop())))
+    const rounds = h.rounds.map((r) => ({ ...r, plays: r.plays.slice() }))
+    let winner = null
+    let guard = 0
+    while (winner === null && guard++ < 12) {
+      const r = rounds[rounds.length - 1]
+      if (r.plays.length < n) {
+        const s = (r.lead + r.plays.length) % n
+        const card = greedyCard(hands[s], r.plays, s, rounds.length - 1)
+        hands[s] = hands[s].filter((c) => c !== card)
+        r.plays.push({ seat: s, card })
+        continue
+      }
+      const top = Math.max(...r.plays.map((p) => rankOf(p.card)))
+      const best = r.plays.filter((p) => rankOf(p.card) === top)
+      const teams = new Set(best.map((p) => teamOf(p.seat)))
+      r.winner = teams.size === 1 ? teamOf(best[0].seat) : 'tie'
+      r.winnerSeat = teams.size === 1 ? best[0].seat : null
+      winner = handWinner(rounds, teamOf(m.mano))
+      if (winner === null) {
+        if (rounds.length === 3) break
+        rounds.push({ lead: r.winner === 'tie' ? r.lead : r.winnerSeat, plays: [], winner: null, winnerSeat: null })
+      }
+    }
+    if (winner === team) wins++
+  }
+  return wins / samples
+}
+
+/** Fácil: a veces se equivoca a propósito. Devuelve null para decidir normalmente. */
+function easyMistake(m, seat, acts, random) {
+  const p = m.hand.pending
+  if (p?.kind === 'declare' || p?.kind === 'flor') return null
+  if (p) {
+    if (random() < 0.35) return pick(acts, (a) => a.type === (random() < 0.5 ? 'accept' : 'reject'))
+    return null
+  }
+  const plays = acts.filter((a) => a.type === 'play')
+  if (plays.length && random() < 0.4) return plays[Math.floor(random() * plays.length)]
+  return null
 }
 
 const pick = (acts, pred) => acts.find(pred)
@@ -61,10 +139,17 @@ function chooseCard(m, seat, acts) {
  * Decide la acción de la compu.
  * @param m vista del partido para ese asiento (viewFor)
  * @param random función aleatoria (para que a veces mienta)
+ * @param level 'facil' | 'normal' | 'dificil' (si no se pasa, el de la partida o 'normal')
  */
-export function chooseAction(m, seat, random = Math.random) {
+export function chooseAction(m, seat, random = Math.random, level = m.config?.level ?? 'normal') {
   const acts = legalActions(m, seat)
   if (!acts.length) return null
+  if (level === 'facil') {
+    const oops = easyMistake(m, seat, acts, random)
+    if (oops) return oops
+  }
+  const hard = level === 'dificil'
+  const chanceOf = () => (hard ? simulatedChance(m, seat, random) : trucoChance(m, seat))
   const h = m.hand
   const mine = h.initial[seat].map(parseCard)
   const envido = envidoPoints(mine)
@@ -105,8 +190,18 @@ export function chooseAction(m, seat, random = Math.random) {
     if (p.kind === 'truco') {
       // El envido está primero
       if (envido >= 29 && callOf(acts, 'envido')) return callOf(acts, 'envido')
-      const chance = trucoChance(m, seat)
+      const chance = chanceOf()
       const raise = acts.find((a) => a.type === 'call' && ['retruco', 'vale4'].includes(a.call))
+      if (hard) {
+        // Aceptar conviene si la chance de ganar compensa lo que se arriesga
+        const stake = p.call // lo que vale si se acepta
+        const lose = p.prevValue // lo que se pierde si se rechaza
+        // Si el rival canta, seguramente tiene con qué: se desconfía un poco de la simulación
+        const c = chance - 0.12
+        if (raise && c > 0.72) return raise
+        if (c * stake - (1 - c) * stake > -lose) return pick(acts, (a) => a.type === 'accept')
+        return pick(acts, (a) => a.type === 'reject')
+      }
       if (raise && (chance > 0.8 || (chance > 0.55 && random() < 0.12))) return raise
       if (chance > 0.42 || random() < 0.08) return pick(acts, (a) => a.type === 'accept')
       return pick(acts, (a) => a.type === 'reject')
@@ -125,8 +220,10 @@ export function chooseAction(m, seat, random = Math.random) {
 
   const trucoCall = acts.find((a) => a.type === 'call' && ['truco', 'retruco', 'vale4'].includes(a.call))
   if (trucoCall) {
-    const chance = trucoChance(m, seat)
-    if (chance > 0.72 || (chance < 0.25 && random() < 0.06)) return trucoCall
+    const chance = chanceOf()
+    if (hard) {
+      if (chance > 0.66 || (chance < 0.2 && random() < 0.1)) return trucoCall
+    } else if (chance > 0.72 || (chance < 0.25 && random() < 0.06)) return trucoCall
   }
 
   return chooseCard(m, seat, acts)

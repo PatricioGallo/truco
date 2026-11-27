@@ -74,18 +74,22 @@ export function useLocalMatch(initial) {
   useEffect(() => setDeadline(myTurnKey ? Date.now() + TURN_MS : null), [myTurnKey])
   const expire = () => {
     if (!match || !legalActions(match, ME).length) return
-    const a = chooseAction(viewFor(match, ME), ME)
+    const a = chooseAction(viewFor(match, ME), ME, Math.random, 'normal') // por vos juega bien, aunque la compu sea fácil
     if (a) act(ME, a)
   }
   const turnTimer = { deadline, total: TURN_MS, onExpire: expire }
 
   const nextHand = () => setMatch((m) => deal(m))
-  const restart = (players, flor) => setMatch(deal(createMatch({ players, flor })))
+  /** Partida nueva: { players, target, flor, level } */
+  const restart = (opts) => setMatch(newLocalMatch(opts))
   const quit = () => setMatch(null)
 
   return { match, view: match ? viewFor(match, ME) : null, me: ME, act, bubbles, nextHand, restart, quit, timer: turnTimer }
 }
 
-export function newLocalMatch(players, flor = true) {
-  return deal(createMatch({ players, flor }))
+/** Partida nueva contra la compu. `level`: 'facil' | 'normal' | 'dificil'. */
+export function newLocalMatch({ players = 2, target = 30, flor = true, level = 'normal' } = {}) {
+  const m = createMatch({ players, target, flor })
+  m.config.level = level // la compu lo lee de la partida
+  return deal(m)
 }

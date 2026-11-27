@@ -52,3 +52,39 @@ test('compu contra compu: los partidos terminan y el reparto es parejo', () => {
   console.log(`  compu contra compu: ${wins[0]} a ${wins[1]}`)
   assert.ok(Math.min(...wins) > 60)
 })
+
+/** Partido 1v1 entre dos niveles de la compu. Devuelve el equipo ganador. */
+function levelMatch(levels, rnd, players = 2) {
+  let m = deal(createMatch({ players }), rnd)
+  let guard = 0
+  while (m.winner === null) {
+    if (m.hand.finished) {
+      m = deal(m, rnd)
+      continue
+    }
+    const seat = [...Array(players).keys()].find((s) => legalActions(m, s).length)
+    m = apply(m, seat, chooseAction(viewFor(m, seat), seat, rnd, levels[teamOf(seat)]))
+    assert.ok(++guard < 4000)
+  }
+  return m.winner
+}
+
+function duel(a, b, N, seed) {
+  const rnd = seeded(seed)
+  let wins = 0
+  for (let g = 0; g < N; g++) {
+    const side = g % 2 // se alternan los lados para que no influya quién es mano
+    const levels = side === 0 ? [a, b] : [b, a]
+    if (levelMatch(levels, rnd) === side) wins++
+  }
+  return wins / N
+}
+
+test('niveles: el normal le gana al fácil y el difícil al normal', () => {
+  const normalVsEasy = duel('normal', 'facil', 200, 11)
+  const hardVsNormal = duel('dificil', 'normal', 200, 13)
+  console.log(`  normal contra fácil: ${(normalVsEasy * 100).toFixed(0)}%`)
+  console.log(`  difícil contra normal: ${(hardVsNormal * 100).toFixed(0)}%`)
+  assert.ok(normalVsEasy > 0.6)
+  assert.ok(hardVsNormal > 0.55)
+})

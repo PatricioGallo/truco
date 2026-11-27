@@ -9,6 +9,8 @@ import Friends from './components/Friends.jsx'
 import NewOnline from './components/NewOnline.jsx'
 import OnlineRoom from './components/OnlineRoom.jsx'
 import Avatar from './components/Avatar.jsx'
+import CpuSetup from './components/CpuSetup.jsx'
+import OnlineHome from './components/OnlineHome.jsx'
 import { useNotifications, Toast, Bell } from './components/Notifications.jsx'
 
 const LOCAL_NAMES = { 2: ['Vos', 'La compu'], 4: ['Vos', 'Compu 1', 'Compañero', 'Compu 2'] }
@@ -69,7 +71,6 @@ function Main({ profile, setProfile }) {
   // Partida contra la compu (se guarda en el celular)
   const [initialLocal] = useState(() => savedLocalMatch()?.match ?? null)
   const local = useLocalMatch(initialLocal)
-  const [flor, setFlor] = useState(true)
 
   // Amigos
   const [friends, setFriends] = useState({ friends: [], incoming: [], outgoing: [] })
@@ -143,7 +144,7 @@ function Main({ profile, setProfile }) {
           bubbles={local.bubbles}
           onAct={(a) => local.act(local.me, a)}
           onNextHand={local.nextHand}
-          onRestart={() => local.restart(n, local.match.config.flor)}
+          onRestart={() => local.restart(local.match.config)}
           onQuit={() => (local.quit(), go('home'))}
           onBack={() => go('home')}
           timer={local.timer}
@@ -160,7 +161,7 @@ function Main({ profile, setProfile }) {
           profile={profile}
           people={people}
           onView={upsertRoom}
-          onBack={() => go('home')}
+          onBack={() => go('online')}
         />
       </div>
     )
@@ -174,7 +175,7 @@ function Main({ profile, setProfile }) {
           data={friends}
           reload={reloadFriends}
           onPlayWith={(p) => go('new', { preset: p })}
-          onBack={() => go('home')}
+          onBack={() => go('online')}
         />
       </div>
     )
@@ -187,6 +188,35 @@ function Main({ profile, setProfile }) {
           friends={friends.friends}
           preset={screen.preset}
           onCreate={async (opts) => openRoom(await api.createRoom(opts))}
+          onBack={() => go('online')}
+        />
+      </div>
+    )
+  }
+
+  if (screen.name === 'cpu') {
+    return withToast(
+      <div className="screen">
+        <CpuSetup
+          saved={local.match && local.match.winner === null ? local.match : null}
+          onResume={() => go('local')}
+          onStart={(opts) => (local.restart(opts), go('local'))}
+          onBack={() => go('home')}
+        />
+      </div>
+    )
+  }
+
+  if (screen.name === 'online') {
+    return withToast(
+      <div className="screen">
+        <OnlineHome
+          friends={friends}
+          rooms={Object.values(rooms)}
+          onNew={() => go('new')}
+          onFriends={() => go('friends')}
+          onOpenRoom={(id) => go('room', { roomId: id })}
+          onJoinCode={async (code) => openRoom(await api.joinRoom({ code }))}
           onBack={() => go('home')}
         />
       </div>
@@ -208,15 +238,10 @@ function Main({ profile, setProfile }) {
         friends={friends}
         rooms={Object.values(rooms)}
         local={local}
-        flor={flor}
-        setFlor={setFlor}
-        onLocal={(players) => (local.restart(players, flor), go('local'))}
-        onResumeLocal={() => go('local')}
-        onFriends={() => go('friends')}
-        onNew={() => go('new')}
+        onCpu={() => go('cpu')}
+        onOnline={() => go('online')}
         onProfile={() => go('profile')}
         onOpenRoom={(id) => go('room', { roomId: id })}
-        onJoinCode={async (code) => openRoom(await api.joinRoom({ code }))}
         people={people}
         notif={notif}
         notifHandlers={notifHandlers}
@@ -225,17 +250,19 @@ function Main({ profile, setProfile }) {
   )
 }
 
-function Home({ profile, friends, rooms, local, flor, setFlor, onLocal, onResumeLocal, onFriends, onNew, onProfile, onOpenRoom, onJoinCode, people, notif, notifHandlers }) {
-  const [code, setCode] = useState('')
-  const [codeError, setCodeError] = useState('')
+function Home({ profile, friends, rooms, local, onCpu, onOnline, onProfile, onOpenRoom, people, notif, notifHandlers }) {
   const invites = rooms.filter((r) => r.status === 'waiting' && r.seats[r.mySeat]?.type === 'user' && !r.seats[r.mySeat].joined)
-  const active = rooms.filter((r) => !invites.includes(r) && ['waiting', 'playing'].includes(r.status))
-  const finished = rooms.filter((r) => r.status === 'finished').slice(0, 3)
+  const playing = rooms.filter((r) => r.status === 'playing').length
   const hostName = (r) => {
     const p = people[r.hostId]
     return p ? displayName(p) : 'Un amigo'
   }
   const localOn = local.match && local.match.winner === null
+  const onlineSub = playing
+    ? `${playing} ${playing === 1 ? 'partida' : 'partidas'} en curso`
+    : friends.incoming.length
+      ? `${friends.incoming.length} ${friends.incoming.length === 1 ? 'pedido' : 'pedidos'} de amistad`
+      : 'Mesas con otros jugadores. Suma al ranking'
 
   return (
     <main className="home">
@@ -264,99 +291,39 @@ function Home({ profile, friends, rooms, local, flor, setFlor, onLocal, onResume
         </section>
       )}
 
-      <section className="block">
-        <h2>Con amigos</h2>
-        <div className="mode-grid">
-          <button className="mode mode-friends" onClick={onNew}>
-            <span className="mode-title">Nueva partida</span>
-            <span className="mode-sub">Invitá amigos o compartí el código</span>
-          </button>
-          <button className="mode mode-friends" onClick={onFriends}>
-            <span className="mode-title">
-              Amigos{friends.incoming.length > 0 && <span className="badge">{friends.incoming.length}</span>}
-            </span>
+      <nav className="categories">
+        <button className="category" onClick={onCpu}>
+          <span className="category-icon" aria-hidden="true">🤖</span>
+          <span className="category-text">
+            <span className="mode-title">Contra la máquina</span>
             <span className="mode-sub">
-              {friends.friends.length ? `${friends.friends.length} agregados` : 'Buscá y agregá jugadores'}
+              {localOn
+                ? `Partida empezada: ${local.match.score[0]} a ${local.match.score[1]}`
+                : 'Mano a mano o de a cuatro, a tu ritmo'}
             </span>
-          </button>
-        </div>
-        <form
-          className="code-join"
-          onSubmit={async (e) => {
-            e.preventDefault()
-            setCodeError('')
-            try {
-              await onJoinCode(code.trim())
-            } catch (err) {
-              setCodeError(err.message)
-            }
-          }}
-        >
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            placeholder="Código de sala"
-            maxLength={5}
-            autoCapitalize="characters"
-            autoCorrect="off"
-          />
-          <button className="btn btn-ghost" disabled={code.trim().length < 5}>
-            Unirme
-          </button>
-        </form>
-        {codeError && <p className="form-error">{codeError}</p>}
-        {active.length > 0 && (
-          <div className="room-list">
-            {active.map((r) => (
-              <button key={r.id} className="room-row" onClick={() => onOpenRoom(r.id)}>
-                <span>
-                  {r.players === 2 ? 'Mano a mano' : 'De a cuatro'}{' '}
-                  <span className="muted">
-                    {r.status === 'waiting'
-                      ? `esperando jugadores (${r.code})`
-                      : `${r.match?.score[r.mySeat % 2] ?? 0} a ${r.match?.score[1 - (r.mySeat % 2)] ?? 0}`}
-                  </span>
-                </span>
-                <span className="tag tag-gold">{r.status === 'waiting' ? 'Sala' : 'Seguir'}</span>
-              </button>
-            ))}
-          </div>
-        )}
-        {finished.length > 0 && (
-          <p className="muted small">
-            Últimas: {finished.map((r) => (r.match.winner === r.mySeat % 2 ? 'ganaste' : 'perdiste')).join(', ')}
-          </p>
-        )}
-      </section>
-
-      <section className="block">
-        <h2>Contra la compu</h2>
-        {localOn && (
-          <button className="room-row" onClick={onResumeLocal}>
-            <span>
-              Seguir partida{' '}
-              <span className="muted">
-                {local.match.score[0]} a {local.match.score[1]}
-              </span>
+          </span>
+          <span className="category-arrow" aria-hidden="true">›</span>
+        </button>
+        <button className="category category-online" onClick={onOnline}>
+          <span className="category-icon" aria-hidden="true">🌐</span>
+          <span className="category-text">
+            <span className="mode-title">
+              Online
+              {friends.incoming.length > 0 && <span className="badge">{friends.incoming.length}</span>}
             </span>
-            <span className="tag tag-gold">Seguir</span>
-          </button>
-        )}
-        <div className="mode-grid">
-          <button className="mode" onClick={() => onLocal(2)}>
-            <span className="mode-title">Mano a mano</span>
-            <span className="mode-sub">Vos contra la compu</span>
-          </button>
-          <button className="mode" onClick={() => onLocal(4)}>
-            <span className="mode-title">De a cuatro</span>
-            <span className="mode-sub">Con un compañero contra dos</span>
-          </button>
-        </div>
-        <label className="toggle">
-          <input type="checkbox" checked={flor} onChange={(e) => setFlor(e.target.checked)} />
-          <span>Con flor</span>
-        </label>
-      </section>
+            <span className="mode-sub">{onlineSub}</span>
+          </span>
+          <span className="category-arrow" aria-hidden="true">›</span>
+        </button>
+        <button className="category category-ranked" disabled>
+          <span className="category-icon" aria-hidden="true">🏆</span>
+          <span className="category-text">
+            <span className="mode-title">Competitivo</span>
+            <span className="mode-sub">Mano a mano con gente de tu nivel</span>
+          </span>
+          <span className="tag">Pronto</span>
+        </button>
+      </nav>
     </main>
   )
 }
