@@ -41,14 +41,20 @@ export default function OnlineHome({ profile, friends, rooms, onNew, onFriends, 
   const [filter, setFilter] = useState(0) // 0 todas, 2 mano a mano, 4 de a cuatro
   const [joining, setJoining] = useState(null)
   const [joinError, setJoinError] = useState('')
+  const [partner, setPartner] = useState('') // amigo con quien sumarse en dupla
   const { tables, hosts } = useOpenTables()
   const mine = new Set(rooms.map((r) => r.id))
-  const visible = (tables ?? []).filter((t) => !mine.has(t.room_id) && t.host_id !== profile.id && (!filter || t.players === filter))
+  const visible = (tables ?? []).filter(
+    (t) =>
+      !mine.has(t.room_id) &&
+      t.host_id !== profile.id &&
+      (partner ? t.players === 4 && t.pair_open : !filter || t.players === filter)
+  )
   const join = async (t) => {
     setJoining(t.room_id)
     setJoinError('')
     try {
-      await onJoinTable(t.room_id)
+      await onJoinTable(t.room_id, partner || null)
     } catch (e) {
       setJoinError(e.message)
       setJoining(null)
@@ -89,6 +95,24 @@ export default function OnlineHome({ profile, friends, rooms, onNew, onFriends, 
 
       <section className="block">
         <h2>Mesas abiertas</h2>
+        {friends.friends.length > 0 && (
+          <label className="field">
+            <span>Ir con</span>
+            <select value={partner} onChange={(e) => setPartner(e.target.value)}>
+              <option value="">Solo</option>
+              {friends.friends.map(({ profile: p }) => (
+                <option key={p.id} value={p.id}>
+                  {displayName(p)} de compañero
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {partner ? (
+          <p className="muted small">
+            Mesas de a cuatro con dos lugares juntos. Al entrar, a tu amigo le llega la invitación para sentarse con vos.
+          </p>
+        ) : (
         <div className="segmented" role="tablist">
           {[
             [0, 'Todas'],
@@ -100,11 +124,16 @@ export default function OnlineHome({ profile, friends, rooms, onNew, onFriends, 
             </button>
           ))}
         </div>
+        )}
         {joinError && <p className="form-error">{joinError}</p>}
         {tables === null ? (
           <p className="muted small">Buscando mesas…</p>
         ) : visible.length === 0 ? (
-          <p className="muted small">No hay mesas abiertas ahora. ¡Abrí una y esperá que se sumen!</p>
+          <p className="muted small">
+            {partner
+              ? 'No hay mesas de a cuatro con dos lugares juntos. Abrí una con tu amigo de compañero.'
+              : 'No hay mesas abiertas ahora. ¡Abrí una y esperá que se sumen!'}
+          </p>
         ) : (
           <div className="room-list">
             {visible.map((t) => (

@@ -37,6 +37,16 @@ const admin = createClient(URL, SERVICE, { auth: { persistSession: false } })
 
 class UserError extends Error {}
 
+/** ¿Son amigos? (solo se puede invitar o ir de compañero con amigos) */
+async function friendIds(userId: string) {
+  const { data } = await admin
+    .from('friendships')
+    .select('requester, addressee')
+    .eq('status', 'accepted')
+    .or(`requester.eq.${userId},addressee.eq.${userId}`)
+  return new Set((data ?? []).map((f: any) => (f.requester === userId ? f.addressee : f.requester)))
+}
+
 /** El token ya lo validó Supabase antes de llegar acá (verify_jwt): solo leemos el usuario. */
 function userIdFrom(req: Request): string | null {
   const token = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '')
@@ -105,19 +115,15 @@ Deno.serve(async (req) => {
         const target = body.target === 15 ? 15 : 30
         const visibility = body.visibility === 'public' ? 'public' : 'private'
         const seats = visibility === 'private' && Array.isArray(body.seats) ? body.seats.slice(0, players) : []
+        const partnerId = visibility === 'public' && players === 4 && body.partnerId ? String(body.partnerId) : null
         // Solo se puede invitar a amigos
-        const invited = seats.filter((s: any) => s?.userId).map((s: any) => s.userId)
+        const invited = [...seats.filter((s: any) => s?.userId).map((s: any) => s.userId), ...(partnerId ? [partnerId] : [])]
         if (invited.length) {
-          const { data: friends } = await admin
-            .from('friendships')
-            .select('requester, addressee')
-            .eq('status', 'accepted')
-            .or(`requester.eq.${userId},addressee.eq.${userId}`)
-          const ok = new Set((friends ?? []).map((f: any) => (f.requester === userId ? f.addressee : f.requester)))
+          const ok = await friendIds(userId)
           if (!invited.every((id: string) => ok.has(id))) throw new UserError('Solo podés invitar a tus amigos.')
         }
         for (let attempt = 0; attempt < 5; attempt++) {
-          const room = createRoom({ id: crypto.randomUUID(), code: newCode(), hostId: userId, players, flor: body.flor !== false, target, visibility, seats })
+          const room = createRoom({ id: crypto.randomUUID(), code: newCode(), hostId: userId, players, flor: body.flor !== false, target, visibility, seats, partnerId })
           try {
             await save(room, null)
             return json({ view: viewForUser(room, userId) })
@@ -128,8 +134,11 @@ Deno.serve(async (req) => {
         throw new UserError('No se pudo crear la sala. Probá de nuevo.')
       }
 
-      case 'join':
-        return await update((prev) => joinRoom(prev, userId), { id: body.roomId, code: body.code })
+      case 'join': {
+        const partnerId = body.partnerId ? String(body.partnerId) : null
+        if (partnerId && !(await friendIds(userId)).has(partnerId)) throw new UserError('Solo podés ir de compañero con un amigo.')
+        return await update((prev) => joinRoom(prev, userId, Date.now(), { partnerId }), { id: body.roomId, code: body.code })
+      }
 
       case 'decline': {
         const prev = await load({ id: body.roomId })
@@ -168,7 +177,7 @@ Deno.serve(async (req) => {
   } catch (e: any) {
     const isUser =
       e instanceof UserError ||
-      /inválida|empezó|completa|anfitrión|invitación|no estás|no está en juego|no terminó|todavía hay tiempo|ninguna jugada|solo con personas|se juega a/i.test(
+      /inválida|empezó|completa|anfitrión|invitación|no estás|no está en juego|no terminó|todavía hay tiempo|ninguna jugada|solo con personas|se juega a|compañero|dupla|dos lugares|ya estás/i.test(
         e?.message ?? ''
       )
     if (!isUser) console.error(e)

@@ -173,20 +173,20 @@ const me = () => {
   return id
 }
 
-export async function createRoom({ players, flor, target, visibility, seats }) {
+export async function createRoom({ players, flor, target, visibility, seats, partnerId }) {
   await net()
   const d = db()
   const uid = me()
-  const room = rooms.createRoom({ id: crypto.randomUUID(), code: rooms.newCode(), hostId: uid, players, flor, target, visibility, seats })
+  const room = rooms.createRoom({ id: crypto.randomUUID(), code: rooms.newCode(), hostId: uid, players, flor, target, visibility, seats, partnerId })
   persist(d, room)
   return rooms.viewForUser(room, uid)
 }
-export async function joinRoom({ roomId, code }) {
+export async function joinRoom({ roomId, code, partnerId }) {
   await net()
   const d = db()
   const prev = roomId ? d.rooms[roomId] : Object.values(d.rooms).find((r) => r.code === String(code).toUpperCase())
   if (!prev) throw new Error('No encontramos esa partida.')
-  const room = rooms.joinRoom(prev, me())
+  const room = rooms.joinRoom(prev, me(), Date.now(), { partnerId })
   persist(d, room)
   return rooms.viewForUser(room, me())
 }

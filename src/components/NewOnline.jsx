@@ -10,6 +10,7 @@ export default function NewOnline({ friends, preset, onCreate, onBack }) {
   const presetValue = preset ? `friend:${preset.id}` : null
   // asientos 1..n-1 (el 0 sos vos). En 2v2: 2 es tu compañero; 1 y 3, los rivales.
   const [seats, setSeats] = useState({ 1: presetValue ?? 'open', 2: 'cpu', 3: 'cpu' })
+  const [partner, setPartner] = useState(preset?.id ?? '') // mesa pública de a cuatro: amigo de compañero
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const isPublic = visibility === 'public'
@@ -37,7 +38,7 @@ export default function NewOnline({ friends, preset, onCreate, onBack }) {
           list.push(v === 'cpu' ? 'cpu' : v === 'open' ? null : { userId: v.slice(7) })
         }
       }
-      await onCreate({ players, flor, target, visibility, seats: list })
+      await onCreate({ players, flor, target, visibility, seats: list, partnerId: isPublic && players === 4 && partner ? partner : null })
     } catch (e) {
       setError(e.message)
       setBusy(false)
@@ -98,6 +99,19 @@ export default function NewOnline({ friends, preset, onCreate, onBack }) {
             onChange={setTarget}
           />
         </div>
+        {isPublic && players === 4 && (
+          <label className="field">
+            <span>Tu compañero</span>
+            <select value={partner} onChange={(e) => setPartner(e.target.value)}>
+              <option value="">Cualquiera que se sume</option>
+              {friends.map(({ profile: p }) => (
+                <option key={p.id} value={p.id}>
+                  {displayName(p)} (@{p.username})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {!isPublic &&
           order.map(([seat, label]) => (
             <label key={seat} className="field">

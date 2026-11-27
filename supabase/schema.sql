@@ -204,6 +204,9 @@ create table if not exists public.truco_lobby (
   updated_at timestamptz not null default now()
 );
 
+-- pair_open: quedan libres los dos lugares de un mismo equipo (para sumarse en dupla)
+alter table public.truco_lobby add column if not exists pair_open boolean not null default false;
+
 create index if not exists truco_lobby_updated on public.truco_lobby (updated_at desc);
 
 alter table public.truco_lobby enable row level security;

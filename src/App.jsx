@@ -218,7 +218,7 @@ function Main({ profile, setProfile }) {
           onFriends={() => go('friends')}
           onOpenRoom={(id) => go('room', { roomId: id })}
           onJoinCode={async (code) => openRoom(await api.joinRoom({ code }))}
-          onJoinTable={async (roomId) => openRoom(await api.joinRoom({ roomId }))}
+          onJoinTable={async (roomId, partnerId) => openRoom(await api.joinRoom({ roomId, partnerId }))}
           onBack={() => go('home')}
         />
       </div>
@@ -256,7 +256,7 @@ function Home({ profile, friends, rooms, local, onCpu, onOnline, onProfile, onOp
   const invites = rooms.filter((r) => r.status === 'waiting' && r.seats[r.mySeat]?.type === 'user' && !r.seats[r.mySeat].joined)
   const playing = rooms.filter((r) => r.status === 'playing').length
   const hostName = (r) => {
-    const p = people[r.hostId]
+    const p = people[r.seats[r.mySeat]?.invitedBy ?? r.hostId]
     return p ? displayName(p) : 'Un amigo'
   }
   const localOn = local.match && local.match.winner === null
@@ -285,7 +285,10 @@ function Home({ profile, friends, rooms, local, onCpu, onOnline, onProfile, onOp
           {invites.map((r) => (
             <button key={r.id} className="room-row is-invite" onClick={() => onOpenRoom(r.id)}>
               <span>
-                <b>{hostName(r)}</b> te invitó a {r.players === 2 ? 'un mano a mano' : 'jugar de a cuatro'}
+                <b>{hostName(r)}</b>{' '}
+                {r.visibility === 'public'
+                  ? 'te eligió de compañero en una mesa pública'
+                  : `te invitó a ${r.players === 2 ? 'un mano a mano' : 'jugar de a cuatro'}`}
               </span>
               <span className="tag tag-gold">Ver</span>
             </button>

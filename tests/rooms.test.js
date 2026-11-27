@@ -91,7 +91,7 @@ test('mesa pública: todos los lugares libres, a 15, y no arranca con la compu',
   let r = createRoom({ id: 'p', code: 'PUB01', hostId: A, players: 4, target: 15, visibility: 'public', seats: [null, 'cpu', { userId: B }, 'cpu'] })
   assert.deepEqual(r.seats.map((s) => s.type), ['user', 'open', 'open', 'open'])
   assert.throws(() => startWithCpu(r, A), /solo con personas/)
-  assert.deepEqual(lobbyEntry(r), { room_id: 'p', code: 'PUB01', host_id: A, players: 4, target: 15, flor: true, taken: 1 })
+  assert.deepEqual(lobbyEntry(r), { room_id: 'p', code: 'PUB01', host_id: A, players: 4, target: 15, flor: true, taken: 1, pair_open: true })
   r = joinRoom(r, B)
   r = joinRoom(r, C)
   assert.equal(lobbyEntry(r).taken, 3)
@@ -106,8 +106,9 @@ test('salir de una mesa que no arrancó: libera el lugar; si sale el anfitrión,
   const { leaveRoom } = await import('../src/server/rooms.js')
   let r = createRoom({ id: 'p', code: 'X', hostId: A, players: 4, visibility: 'public' })
   r = joinRoom(r, B)
+  assert.equal(r.seats[2].userId, B) // solo: primero el lugar del equipo del anfitrión
   r = leaveRoom(r, B)
-  assert.equal(r.seats[1].type, 'open')
+  assert.equal(r.seats[2].type, 'open')
   assert.equal(r.status, 'waiting')
   r = leaveRoom(r, A)
   assert.equal(r.status, 'cancelled')
@@ -150,4 +151,45 @@ test('en una pública, irse no cancela: la compu termina la partida por quien se
   }
   assert.equal(r.status, 'finished')
   assert.equal(r.seats[1].left, true)
+})
+
+test('dupla: crear mesa pública de a cuatro con un amigo de compañero', async () => {
+  const { lobbyEntry } = await import('../src/server/rooms.js')
+  let r = createRoom({ id: 'd', code: 'X', hostId: A, players: 4, visibility: 'public', partnerId: B })
+  assert.deepEqual(r.seats.map((s) => s.type), ['user', 'open', 'user', 'open'])
+  assert.equal(r.seats[2].joined, false)
+  assert.equal(r.seats[2].invitedBy, A)
+  assert.equal(lobbyEntry(r).taken, 2)
+  assert.equal(lobbyEntry(r).pair_open, true) // quedan juntos los dos rivales
+  // Si el amigo rechaza, el lugar queda libre (no entra la compu)
+  const declined = declineRoom(r, B)
+  assert.equal(declined.seats[2].type, 'open')
+  r = joinRoom(r, B)
+  assert.equal(r.seats[2].joined, true)
+  // Privadas no aceptan compañero por este camino
+  assert.throws(() => createRoom({ id: 'x', code: 'X', hostId: A, players: 4, partnerId: B }), /Compañero/)
+})
+
+test('dupla: sumarse con un amigo ocupa los dos lugares del equipo rival', async () => {
+  const { lobbyEntry, leaveRoom } = await import('../src/server/rooms.js')
+  const D = 'user-d'
+  let r = createRoom({ id: 'd', code: 'X', hostId: A, players: 4, visibility: 'public' })
+  r = joinRoom(r, C, Date.now(), { partnerId: D })
+  assert.equal(r.seats[1].userId, C)
+  assert.equal(r.seats[3].userId, D)
+  assert.equal(r.seats[3].joined, false)
+  assert.equal(r.seats[3].invitedBy, C)
+  assert.equal(lobbyEntry(r).pair_open, false)
+  // Ya no entra otra dupla, pero sí alguien solo (al lugar del anfitrión)
+  assert.throws(() => joinRoom(r, B, Date.now(), { partnerId: 'user-e' }), /dos lugares/)
+  const solo = joinRoom(r, B)
+  assert.equal(solo.seats[2].userId, B)
+  // Si el que armó la dupla se va antes de empezar, se libera también el lugar del amigo
+  const gone = leaveRoom(r, C)
+  assert.deepEqual(gone.seats.map((s) => s.type), ['user', 'open', 'open', 'open'])
+  // Cuando entran todos, arranca
+  r = joinRoom(solo, D)
+  assert.equal(r.status, 'playing')
+  assert.equal(r.seats[1].userId, C)
+  assert.equal(r.seats[3].userId, D) // mismo equipo: asientos 1 y 3
 })

@@ -55,8 +55,11 @@ export function useNotifications({ profile, friends, rooms, people }) {
       id: `inv-${r.id}`,
       kind: 'invite',
       room: r,
-      profile: people[r.hostId],
-      text: `${displayName(people[r.hostId]) || 'Un amigo'} te invitó a ${r.players === 2 ? 'un mano a mano' : 'jugar de a cuatro'}`,
+      profile: people[r.seats[r.mySeat]?.invitedBy ?? r.hostId],
+      text:
+        r.visibility === 'public'
+          ? `${displayName(people[r.seats[r.mySeat]?.invitedBy ?? r.hostId]) || 'Un amigo'} te eligió de compañero en una mesa pública`
+          : `${displayName(people[r.hostId]) || 'Un amigo'} te invitó a ${r.players === 2 ? 'un mano a mano' : 'jugar de a cuatro'}`,
     })),
     ...friends.incoming.map((f) => ({
       id: `fr-${f.friendshipId}`,

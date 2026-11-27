@@ -20,13 +20,17 @@ export function newCode(random = Math.random) {
  * @param visibility 'private': con invitados, código y la compu si falta gente.
  *                   'public': aparece en la lista de mesas abiertas y arranca solo con personas.
  * @param seats (solo privadas) lista por asiento: { userId } invitado, 'cpu' o null (libre para quien tenga el código)
+ * @param partnerId (solo públicas de a cuatro) amigo que va de compañero: se le reserva el asiento 2
  * El anfitrión siempre es el asiento 0.
  */
-export function createRoom({ id, code, hostId, players = 2, flor = true, target = 30, visibility = 'private', seats, now = Date.now() }) {
+export function createRoom({ id, code, hostId, players = 2, flor = true, target = 30, visibility = 'private', seats, partnerId = null, now = Date.now() }) {
   if (players !== 2 && players !== 4) throw new Error('Se juega de a 2 o de a 4')
   if (target !== 15 && target !== 30) throw new Error('Se juega a 15 o a 30')
   const isPublic = visibility === 'public'
-  const list = Array.from({ length: players }, (_, s) => (s === 0 ? { userId: hostId } : isPublic ? null : seats?.[s] ?? null))
+  if (partnerId && (!isPublic || players !== 4 || partnerId === hostId)) throw new Error('Compañero inválido')
+  const list = Array.from({ length: players }, (_, s) =>
+    s === 0 ? { userId: hostId } : isPublic ? (s === 2 && partnerId ? { userId: partnerId } : null) : seats?.[s] ?? null
+  )
   const room = {
     id,
     code,
@@ -37,7 +41,11 @@ export function createRoom({ id, code, hostId, players = 2, flor = true, target 
     visibility: isPublic ? 'public' : 'private',
     status: 'waiting', // waiting | playing | finished | cancelled
     seats: list.map((x) =>
-      x === 'cpu' ? { type: 'cpu' } : x?.userId ? { type: 'user', userId: x.userId, joined: x.userId === hostId } : { type: 'open' }
+      x === 'cpu'
+        ? { type: 'cpu' }
+        : x?.userId
+          ? { type: 'user', userId: x.userId, joined: x.userId === hostId, ...(x.userId === hostId ? {} : { invitedBy: hostId }) }
+          : { type: 'open' }
     ),
     match: null,
     version: 0,
@@ -61,13 +69,29 @@ function maybeStart(room) {
   return room
 }
 
-/** Se suma a la sala: si estaba invitado ocupa su asiento; si no, el primero libre. */
-export function joinRoom(prev, userId, now = Date.now()) {
+/** ¿Se puede sumar una dupla? Hacen falta los dos asientos del equipo rival libres (el 1 y el 3). */
+export const pairOpen = (room) => room.players === 4 && room.seats[1]?.type === 'open' && room.seats[3]?.type === 'open'
+
+/**
+ * Se suma a la mesa: si estaba invitado ocupa su asiento; si no, uno libre.
+ * Con `partnerId` (mesas públicas de a cuatro) se sienta con un amigo de compañero:
+ * ocupa el asiento 1 y al amigo se le reserva el 3 (le llega la invitación).
+ */
+export function joinRoom(prev, userId, now = Date.now(), { partnerId = null } = {}) {
   const room = clone(prev)
   if (room.status !== 'waiting') throw new Error('La partida ya empezó')
   let seat = seatOf(room, userId)
-  if (seat === -1) {
-    seat = room.seats.findIndex((s) => s.type === 'open')
+  if (partnerId) {
+    if (seat !== -1) throw new Error('Ya estás en esta mesa')
+    if (room.visibility !== 'public' || room.players !== 4) throw new Error('En dupla solo se entra a mesas públicas de a cuatro')
+    if (partnerId === userId || seatOf(room, partnerId) !== -1) throw new Error('Tu compañero ya está en esta mesa')
+    if (!pairOpen(room)) throw new Error('No quedan dos lugares juntos en esta mesa')
+    room.seats[1] = { type: 'user', userId, joined: true }
+    room.seats[3] = { type: 'user', userId: partnerId, joined: false, invitedBy: userId }
+  } else if (seat === -1) {
+    // Quien entra solo ocupa primero el lugar del equipo del anfitrión, así quedan dos juntos para una dupla
+    const order = room.players === 4 ? [2, 1, 3] : [1]
+    seat = order.find((s) => room.seats[s]?.type === 'open') ?? -1
     if (seat === -1) throw new Error('La sala está completa')
     room.seats[seat] = { type: 'user', userId, joined: true }
   } else room.seats[seat].joined = true
@@ -76,12 +100,12 @@ export function joinRoom(prev, userId, now = Date.now()) {
   return maybeStart(room)
 }
 
-/** Rechazar una invitación: el asiento lo ocupa la compu. */
+/** Rechazar una invitación: en las privadas el asiento lo ocupa la compu; en las públicas queda libre. */
 export function declineRoom(prev, userId, now = Date.now()) {
   const room = clone(prev)
   const seat = seatOf(room, userId)
-  if (seat <= 0 || room.status !== 'waiting') throw new Error('No hay invitación para rechazar')
-  room.seats[seat] = { type: 'cpu' }
+  if (seat <= 0 || room.status !== 'waiting' || room.seats[seat].joined) throw new Error('No hay invitación para rechazar')
+  room.seats[seat] = room.visibility === 'public' ? { type: 'open' } : { type: 'cpu' }
   room.version++
   room.turnAt = now
   return maybeStart(room)
@@ -108,7 +132,11 @@ export function leaveRoom(prev, userId, now = Date.now()) {
   if (seat === 0) {
     room.status = 'cancelled'
     room.leftBy = userId
-  } else room.seats[seat] = { type: 'open' }
+  } else {
+    room.seats[seat] = { type: 'open' }
+    // Si había invitado a un compañero que todavía no entró, ese lugar también se libera
+    room.seats = room.seats.map((s) => (s.type === 'user' && !s.joined && s.invitedBy === userId ? { type: 'open' } : s))
+  }
   room.version++
   room.turnAt = now
   return room
@@ -233,5 +261,6 @@ export function lobbyEntry(room) {
     target: room.target ?? 30,
     flor: room.flor,
     taken: room.seats.filter((s) => s.type === 'user').length,
+    pair_open: pairOpen(room),
   }
 }
