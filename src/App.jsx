@@ -13,7 +13,8 @@ import CpuSetup from './components/CpuSetup.jsx'
 import OnlineHome from './components/OnlineHome.jsx'
 import { RankingScreen, LevelPanel, HomeRanking } from './components/Ranking.jsx'
 import PlayerProfile, { PlayerHeader, StatsGrid, usePlayerStats } from './components/PlayerProfile.jsx'
-import { COUNTRIES, flagOf } from './countries.js'
+import Settings from './components/Settings.jsx'
+import InstallBanner from './components/InstallBanner.jsx'
 import { useNotifications, Toast, Bell } from './components/Notifications.jsx'
 
 const LOCAL_NAMES = { 2: ['Vos', 'La compu'], 4: ['Vos', 'Compu 1', 'Compañero', 'Compu 2'] }
@@ -256,10 +257,18 @@ function Main({ profile, setProfile }) {
     )
   }
 
+  if (screen.name === 'settings') {
+    return withToast(
+      <div className="screen">
+        <Settings profile={profile} onProfile={setProfile} onBack={() => go(screen.from ?? 'home')} />
+      </div>
+    )
+  }
+
   if (screen.name === 'profile') {
     return withToast(
       <div className="screen">
-        <Profile profile={profile} onChange={setProfile} onBack={() => go('home')} onRanking={() => go('ranking', { from: 'profile' })} />
+        <Profile profile={profile} onChange={setProfile} onBack={() => go('home')} onRanking={() => go('ranking', { from: 'profile' })} onSettings={() => go('settings', { from: 'profile' })} />
       </div>
     )
   }
@@ -276,6 +285,7 @@ function Main({ profile, setProfile }) {
         onRanking={() => go('ranking', { from: 'home' })}
         onOpenPlayer={openPlayer}
         onProfile={() => go('profile')}
+        onSettings={() => go('settings', { from: 'home' })}
         onOpenRoom={(id) => go('room', { roomId: id })}
         people={people}
         notif={notif}
@@ -285,7 +295,7 @@ function Main({ profile, setProfile }) {
   )
 }
 
-function Home({ profile, friends, rooms, local, onCpu, onOnline, onRanking, onOpenPlayer, onProfile, onOpenRoom, people, notif, notifHandlers }) {
+function Home({ profile, friends, rooms, local, onCpu, onOnline, onRanking, onOpenPlayer, onProfile, onSettings, onOpenRoom, people, notif, notifHandlers }) {
   const invites = rooms.filter((r) => r.status === 'waiting' && r.seats[r.mySeat]?.type === 'user' && !r.seats[r.mySeat].joined)
   const playing = rooms.filter((r) => r.status === 'playing').length
   const hostName = (r) => {
@@ -305,12 +315,25 @@ function Home({ profile, friends, rooms, local, onCpu, onOnline, onRanking, onOp
         <h1 className="title title-small">Truco</h1>
         <span className="top-actions">
           <Bell notif={notif} {...notifHandlers} />
+          <button className="bell" onClick={onSettings} aria-label="Configuración">
+            <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+              <path
+                d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm7.4-2.5a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.3 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.3 2.5h4l.3-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4-2-1.6Z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
           <button className="me" onClick={onProfile} aria-label="Mi perfil">
             <Avatar profile={profile} size={40} />
           </button>
         </span>
       </header>
       <p className="greeting">Hola, {profile.first_name || profile.username}. ¿Una mano?</p>
+
+      <InstallBanner />
 
       {invites.length > 0 && (
         <section className="panel invites">
@@ -373,7 +396,7 @@ function Home({ profile, friends, rooms, local, onCpu, onOnline, onRanking, onOp
   )
 }
 
-function Profile({ profile, onChange, onBack, onRanking }) {
+function Profile({ profile, onChange, onBack, onRanking, onSettings }) {
   const stats = usePlayerStats(profile.id)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
@@ -402,15 +425,12 @@ function Profile({ profile, onChange, onBack, onRanking }) {
         <span className="photo-badge">{busy ? '…' : '📷'}</span>
         <input type="file" accept="image/*" hidden onChange={onPhoto} />
       </label>
-      <PlayerHeader profile={profile} hideAvatar />
+      <PlayerHeader profile={profile} country={stats?.country} hideAvatar />
       {msg && <p className="muted center">{msg}</p>}
       <LevelPanel rating={stats} onOpenRanking={onRanking} />
       <StatsGrid stats={stats} />
-      <EditProfile profile={profile} onChange={onChange} />
-      <LoginEmail userId={profile.id} />
-      <p className="muted small center">Es la misma cuenta que el Sudoku: la foto y el nombre se ven en los dos juegos.</p>
-      <button className="btn btn-ghost" onClick={() => api.signOut()}>
-        Cerrar sesión
+      <button className="btn btn-ghost" onClick={onSettings}>
+        ⚙️ Configuración: datos, contraseña, privacidad y avisos
       </button>
       <p className="credits">
         Naipes: dibujos de{' '}
@@ -424,123 +444,5 @@ function Profile({ profile, onChange, onBack, onRanking }) {
         . Adaptados a imágenes livianas.
       </p>
     </main>
-  )
-}
-
-// Nombre, apellido y nacionalidad (los mismos datos que usa el Sudoku)
-function EditProfile({ profile, onChange }) {
-  const [form, setForm] = useState({
-    first_name: profile.first_name ?? '',
-    last_name: profile.last_name ?? '',
-    country: profile.country ?? '',
-  })
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState('')
-  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
-  const changed =
-    form.first_name.trim() !== (profile.first_name ?? '') ||
-    form.last_name.trim() !== (profile.last_name ?? '') ||
-    form.country !== (profile.country ?? '')
-  const submit = async (e) => {
-    e.preventDefault()
-    setBusy(true)
-    setMsg('')
-    try {
-      onChange(await api.updateMyProfile(profile.id, form))
-      setMsg('Datos guardados.')
-    } catch (err) {
-      setMsg(err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <form className="login-form panel" onSubmit={submit}>
-      <h3>Tus datos</h3>
-      <div className="field-row">
-        <label className="field">
-          <span>Nombre</span>
-          <input value={form.first_name} onChange={set('first_name')} maxLength={40} autoComplete="given-name" />
-        </label>
-        <label className="field">
-          <span>Apellido</span>
-          <input value={form.last_name} onChange={set('last_name')} maxLength={40} autoComplete="family-name" />
-        </label>
-      </div>
-      <label className="field">
-        <span>Nacionalidad</span>
-        <select value={form.country} onChange={set('country')}>
-          <option value="">Sin elegir</option>
-          {COUNTRIES.map(([code, name]) => (
-            <option key={code} value={code}>
-              {flagOf(code)} {name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {msg && <p className="muted small center">{msg}</p>}
-      {changed && (
-        <button className="btn btn-primary" disabled={busy}>
-          {busy ? 'Guardando…' : 'Guardar'}
-        </button>
-      )}
-    </form>
-  )
-}
-
-// Mail opcional para entrar escribiéndolo en vez del usuario
-function LoginEmail({ userId }) {
-  const [saved, setSaved] = useState(null)
-  const [email, setEmail] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState('')
-  useEffect(() => {
-    let alive = true
-    api
-      .getMyEmail(userId)
-      .then((e) => alive && (setSaved(e), setEmail(e)))
-      .catch(() => alive && setSaved(''))
-    return () => {
-      alive = false
-    }
-  }, [userId])
-  const submit = async (e) => {
-    e.preventDefault()
-    setBusy(true)
-    setMsg('')
-    try {
-      const value = await api.setMyEmail(userId, email)
-      setSaved(value)
-      setEmail(value)
-      setMsg(value ? 'Listo: ya podés entrar con este mail.' : 'Mail borrado.')
-    } catch (err) {
-      setMsg(err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-  if (saved === null) return null
-  const changed = email.trim().toLowerCase() !== saved
-  return (
-    <form className="login-form" onSubmit={submit}>
-      <label className="field">
-        <span>Mail para entrar (opcional)</span>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          autoComplete="email"
-          autoCapitalize="none"
-          spellCheck="false"
-          placeholder="tu@mail.com"
-        />
-      </label>
-      {msg && <p className="muted small center">{msg}</p>}
-      {changed && (
-        <button className="btn btn-primary" disabled={busy}>
-          {busy ? 'Guardando…' : email.trim() ? 'Guardar mail' : 'Borrar mail'}
-        </button>
-      )}
-    </form>
   )
 }

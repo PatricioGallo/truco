@@ -16,6 +16,7 @@ export function usePlayerStats(userId, refresh) {
       .ratingsByIds([userId])
       .then(async (r) => {
         const rating = { ...EMPTY, ...r[userId] }
+        if (r[userId] && r[userId].games === null) rating.games = null // perfil privado
         const pos = rating.games ? await api.rankPosition(rating.points) : null
         if (alive) setStats({ ...rating, pos })
       })
@@ -30,6 +31,12 @@ export function usePlayerStats(userId, refresh) {
 /** Partidas, ganadas, perdidas, efectividad, racha y puesto. */
 export function StatsGrid({ stats }) {
   if (!stats) return <p className="muted small center">Cargando estadísticas…</p>
+  if (stats.games === null)
+    return (
+      <section className="stats-grid is-private">
+        <p className="muted center">🔒 Perfil privado: sus estadísticas solo las ven sus amigos.</p>
+      </section>
+    )
   const lost = stats.games - stats.wins
   const pct = stats.games ? Math.round((stats.wins / stats.games) * 100) : 0
   const items = [
@@ -54,17 +61,17 @@ export function StatsGrid({ stats }) {
 }
 
 /** Nombre completo, usuario y nacionalidad. */
-export function PlayerHeader({ profile, big = false, hideAvatar = false }) {
+export function PlayerHeader({ profile, country, big = false, hideAvatar = false }) {
   return (
     <div className="player-head">
       {!hideAvatar && <Avatar profile={profile} size={big ? 112 : 88} />}
       <h2 className="page-title center">{displayName(profile)}</h2>
       <p className="muted center player-sub">
         @{profile.username}
-        {profile.country && (
+        {country && (
           <span className="player-country">
             {' · '}
-            {flagOf(profile.country)} {countryName(profile.country)}
+            {flagOf(country)} {countryName(country)}
           </span>
         )}
       </p>
@@ -116,7 +123,7 @@ export default function PlayerProfile({ userId, me, friends, reloadFriends, onPl
         <p className="muted">{error || 'Cargando…'}</p>
       ) : (
         <>
-          <PlayerHeader profile={profile} />
+          <PlayerHeader profile={profile} country={stats?.country} />
           {!isMe && (
             <div className="player-actions">
               {friend ? (

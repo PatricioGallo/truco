@@ -57,7 +57,11 @@ export function LevelPanel({ rating, onOpenRanking }) {
           <span className="muted small">¡Llegaste a lo más alto!</span>
         )}
         <span className="muted small">
-          {rating.games ? `${rating.wins} ganadas de ${rating.games}` : 'Jugá mesas públicas para entrar al ranking'}
+          {rating.games === null
+            ? '🔒 Perfil privado'
+            : rating.games
+              ? `${rating.wins} ganadas de ${rating.games}`
+              : 'Jugá mesas públicas para entrar al ranking'}
           {rating.streak >= 3 ? ` · racha de ${rating.streak} 🔥` : ''}
         </span>
       </div>
@@ -144,7 +148,7 @@ export function RankingScreen({ profile, onBack, onOpenPlayer }) {
                 <span className="person-text">
                   <b>
                     {r.user_id === profile.id ? 'Vos' : people[r.user_id] ? displayName(people[r.user_id]) : 'Jugador'}{' '}
-                    {flagOf(people[r.user_id]?.country)}
+                    {flagOf(r.country)}
                   </b>
                   <LevelBadge points={r.points} />
                 </span>
@@ -158,7 +162,7 @@ export function RankingScreen({ profile, onBack, onOpenPlayer }) {
                 <span className="rank-pos">{me.pos}</span>
                 <Avatar profile={profile} size={36} />
                 <span className="person-text">
-                  <b>Vos {flagOf(profile.country)}</b>
+                  <b>Vos {flagOf(me.country)}</b>
                   <LevelBadge points={me.points} />
                 </span>
                 <span className="rank-points">{me.points}</span>

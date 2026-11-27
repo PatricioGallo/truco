@@ -29,6 +29,7 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
+        importScripts: ['push-sw.js'], // notificaciones push
         globPatterns: ['**/*.{js,css,html,svg,png,webp}'],
         navigateFallback: 'index.html',
         runtimeCaching: [

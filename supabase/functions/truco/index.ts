@@ -22,6 +22,7 @@ import {
   lobbyEntry,
 } from './server/rooms.js'
 import { rateRoom } from './server/ranking.js'
+import { sendPush } from './push.ts'
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -46,6 +47,22 @@ async function friendIds(userId: string) {
     .eq('status', 'accepted')
     .or(`requester.eq.${userId},addressee.eq.${userId}`)
   return new Set((data ?? []).map((f: any) => (f.requester === userId ? f.addressee : f.requester)))
+}
+
+/** Nombre para mostrar en los avisos. */
+async function nameOf(userId: string) {
+  const { data } = await admin.from('profiles').select('first_name, username').eq('id', userId).maybeSingle()
+  return data?.first_name || data?.username || 'Alguien'
+}
+
+/** Avisa a los demás de la mesa que la partida arrancó. */
+async function notifyStarted(room: any, actorId: string) {
+  const others = invitedUserIds(room).filter((id: string) => id !== actorId)
+  await sendPush(admin, others, 'invites', {
+    title: '¡Arrancó la partida!',
+    body: room.players === 2 ? 'Ya están los dos: a jugar el mano a mano.' : 'Se llenó la mesa de a cuatro: a jugar.',
+    tag: room.id,
+  })
 }
 
 /** El token ya lo validó Supabase antes de llegar acá (verify_jwt): solo leemos el usuario. */
@@ -125,6 +142,7 @@ Deno.serve(async (req) => {
       const prev = await load(where)
       const room = fn(prev)
       await save(room, prev.version)
+      if (prev.status === 'waiting' && room.status === 'playing') await notifyStarted(room, userId)
       return json({ view: viewForUser(room, userId) })
     }
 
@@ -145,6 +163,17 @@ Deno.serve(async (req) => {
           const room = createRoom({ id: crypto.randomUUID(), code: newCode(), hostId: userId, players, flor: body.flor !== false, target, visibility, seats, partnerId })
           try {
             await save(room, null)
+            if (invited.length) {
+              const who = await nameOf(userId)
+              await sendPush(admin, invited, 'invites', {
+                title: 'Te invitaron a jugar',
+                body:
+                  visibility === 'public'
+                    ? `${who} te eligió de compañero en una mesa de a cuatro`
+                    : `${who} te invitó a ${players === 2 ? 'un mano a mano' : 'jugar de a cuatro'}`,
+                tag: room.id,
+              })
+            }
             return json({ view: viewForUser(room, userId) })
           } catch (e: any) {
             if (!String(e?.message).includes('duplicate')) throw e
@@ -156,7 +185,15 @@ Deno.serve(async (req) => {
       case 'join': {
         const partnerId = body.partnerId ? String(body.partnerId) : null
         if (partnerId && !(await friendIds(userId)).has(partnerId)) throw new UserError('Solo podés ir de compañero con un amigo.')
-        return await update((prev) => joinRoom(prev, userId, Date.now(), { partnerId }), { id: body.roomId, code: body.code })
+        const res = await update((prev) => joinRoom(prev, userId, Date.now(), { partnerId }), { id: body.roomId, code: body.code })
+        if (partnerId) {
+          await sendPush(admin, [partnerId], 'invites', {
+            title: 'Te invitaron a jugar',
+            body: `${await nameOf(userId)} te eligió de compañero en una mesa de a cuatro`,
+            tag: body.roomId,
+          })
+        }
+        return res
       }
 
       case 'decline': {
@@ -186,6 +223,45 @@ Deno.serve(async (req) => {
       case 'back':
         return await update((prev) => backRoom(prev, userId), { id: body.roomId })
 
+      case 'friend_request': {
+        // Aviso de solicitud de amistad (la solicitud ya la creó la app)
+        const to = String(body.to ?? '')
+        const { data } = await admin
+          .from('friendships')
+          .select('id')
+          .eq('requester', userId)
+          .eq('addressee', to)
+          .eq('status', 'pending')
+          .maybeSingle()
+        if (data) {
+          await sendPush(admin, [to], 'friends', {
+            title: 'Solicitud de amistad',
+            body: `${await nameOf(userId)} te quiere agregar de amigo`,
+            tag: `friend-${userId}`,
+          })
+        }
+        return json({ ok: true })
+      }
+
+      case 'push_subscribe': {
+        const sub = body.subscription
+        if (!sub?.endpoint || !/^https:\/\//.test(sub.endpoint) || !sub.keys?.p256dh || !sub.keys?.auth)
+          throw new UserError('Suscripción inválida.')
+        const { error } = await admin
+          .from('truco_push_subs')
+          .upsert({ endpoint: sub.endpoint, user_id: userId, subscription: sub })
+        if (error) throw error
+        return json({ ok: true })
+      }
+
+      case 'push_unsubscribe':
+        await admin.from('truco_push_subs').delete().eq('endpoint', String(body.endpoint ?? '')).eq('user_id', userId)
+        return json({ ok: true })
+
+      case 'push_test':
+        await sendPush(admin, [userId], 'test', { title: 'Truco', body: '¡Listo! Las notificaciones funcionan en este celular.' })
+        return json({ ok: true, configured: Boolean(Deno.env.get('VAPID_PRIVATE_KEY')) })
+
       case 'dismiss':
         await admin.from('truco_views').delete().eq('room_id', body.roomId).eq('user_id', userId)
         return json({ ok: true })
@@ -196,7 +272,7 @@ Deno.serve(async (req) => {
   } catch (e: any) {
     const isUser =
       e instanceof UserError ||
-      /inválida|empezó|completa|anfitrión|invitación|no estás|no está en juego|no terminó|todavía hay tiempo|ninguna jugada|solo con personas|se juega a|compañero|dupla|dos lugares|ya estás/i.test(
+      /inválida|empezó|completa|anfitrión|invitación|no estás|no está en juego|no terminó|todavía hay tiempo|ninguna jugada|solo con personas|se juega a|compañero|dupla|dos lugares|ya estás|suscripción/i.test(
         e?.message ?? ''
       )
     if (!isUser) console.error(e)

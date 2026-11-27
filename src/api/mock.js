@@ -96,13 +96,40 @@ export async function profilesByIds(ids) {
   const d = db()
   return ids.map((id) => d.profiles[id]).filter(Boolean)
 }
-export async function updateMyProfile(id, { first_name, last_name, country }) {
+export async function updateMyProfile(id, { first_name, last_name }) {
   await net()
   const d = db()
   const clean = (x) => (x ?? '').trim() || null
-  d.profiles[id] = { ...d.profiles[id], first_name: clean(first_name), last_name: clean(last_name), country: country || null }
+  d.profiles[id] = { ...d.profiles[id], first_name: clean(first_name), last_name: clean(last_name) }
   save(d)
   return d.profiles[id]
+}
+export async function changePassword(username, current, next) {
+  await net()
+  if (next.length < 6) throw new Error('La contraseña nueva tiene que tener al menos 6 caracteres.')
+  const d = db()
+  const u = Object.values(d.users).find((x) => x.username === username)
+  if (!u || u.password !== current) throw new Error('La contraseña actual no es correcta.')
+  u.password = next
+  save(d)
+}
+export const DEFAULT_SETTINGS = { country: null, private_profile: false, notify_invites: true, notify_friends: true }
+export async function getSettings(userId) {
+  await net()
+  return { ...DEFAULT_SETTINGS, ...db().settings?.[userId] }
+}
+export async function saveSettings(userId, patch) {
+  await net()
+  const d = db()
+  d.settings ??= {}
+  d.settings[userId] = { ...DEFAULT_SETTINGS, ...d.settings[userId], ...patch, user_id: userId }
+  save(d)
+  return d.settings[userId]
+}
+export async function pushSubscribe() {}
+export async function pushUnsubscribe() {}
+export async function pushTest() {
+  return { ok: true }
 }
 export async function uploadAvatar(id, file) {
   await net()
@@ -320,18 +347,37 @@ export function seedDemo() {
 }
 
 // ---------- Ranking ----------
-export async function ratingsByIds(ids) {
-  const all = db().ratings ?? {}
-  return Object.fromEntries(ids.filter((id) => all[id]).map((id) => [id, all[id]]))
+// Mismas reglas de privacidad que las funciones de la base (truco_cards, truco_leaderboard)
+const areFriends = (d, a, b) =>
+  d.friendships.some((f) => f.status === 'accepted' && [f.requester, f.addressee].includes(a) && [f.requester, f.addressee].includes(b))
+function card(d, id) {
+  const r = d.ratings?.[id] ?? {}
+  const s = d.settings?.[id] ?? {}
+  const ok = id === session() || !s.private_profile || areFriends(d, session(), id)
+  return {
+    user_id: id,
+    points: r.points ?? 0,
+    games: ok ? r.games ?? 0 : null,
+    wins: ok ? r.wins ?? 0 : null,
+    streak: ok ? r.streak ?? 0 : null,
+    country: ok ? s.country ?? null : null,
+    private: Boolean(s.private_profile),
+  }
 }
+export async function ratingsByIds(ids) {
+  const d = db()
+  return Object.fromEntries(ids.map((id) => [id, card(d, id)]))
+}
+const ranked = (d) => Object.values(d.ratings ?? {}).filter((r) => r.games > 0) // todos aparecen siempre
 export async function leaderboard(limit = 50) {
-  return Object.values(db().ratings ?? {})
-    .filter((r) => r.games > 0)
+  const d = db()
+  return ranked(d)
     .sort((a, b) => b.points - a.points)
     .slice(0, limit)
+    .map((r) => ({ user_id: r.user_id, points: r.points, country: card(d, r.user_id).country }))
 }
 export async function rankPosition(points) {
-  return Object.values(db().ratings ?? {}).filter((r) => r.points > points).length + 1
+  return ranked(db()).filter((r) => r.points > points).length + 1
 }
 export async function ratingChange(roomId, myId) {
   return db().ratingLog?.[roomId]?.[myId] ?? null

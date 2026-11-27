@@ -5,6 +5,10 @@ import App from './App.jsx'
 import Card from './components/Card.jsx'
 import './styles.css'
 import { registerSW } from 'virtual:pwa-register'
+import { captureInstallPrompt } from './pwa.js'
+
+// En Android el navegador avisa una vez que se puede instalar: lo guardamos para el botón "Instalar"
+captureInstallPrompt()
 
 // La app queda guardada en el celular. Cada vez que se vuelve a ella (o cada hora)
 // se fija si hay una versión nueva; si la hay, la instala y recarga sola.

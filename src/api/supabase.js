@@ -99,7 +99,7 @@ export async function getProfile(id) {
 }
 export async function profilesByIds(ids) {
   if (!ids.length) return []
-  return check(await sb.from('profiles').select('id, username, first_name, last_name, avatar_url, country').in('id', ids))
+  return check(await sb.from('profiles').select('id, username, first_name, last_name, avatar_url').in('id', ids))
 }
 export async function uploadAvatar(userId, file) {
   const blob = await resizeImage(file)
@@ -109,14 +109,36 @@ export async function uploadAvatar(userId, file) {
   return check(await sb.from('profiles').update({ avatar_url: url }).eq('id', userId).select().single())
 }
 
-/** Edita mis datos: nombre, apellido y nacionalidad (código de país o null). */
-export async function updateMyProfile(userId, { first_name, last_name, country }) {
+/** Edita mi nombre y apellido (son los mismos del Sudoku). */
+export async function updateMyProfile(userId, { first_name, last_name }) {
   const clean = (x) => (x ?? '').trim() || null
+  if ((first_name ?? '').length > 40 || (last_name ?? '').length > 40) throw new Error('Nombre y apellido: hasta 40 caracteres cada uno.')
+  return check(
+    await sb.from('profiles').update({ first_name: clean(first_name), last_name: clean(last_name) }).eq('id', userId).select().single()
+  )
+}
+
+/** Cambia la contraseña: primero comprueba la actual. */
+export async function changePassword(username, current, next) {
+  if (next.length < 6) throw new Error('La contraseña nueva tiene que tener al menos 6 caracteres.')
+  const { error } = await sb.auth.signInWithPassword({ email: toEmail(username), password: current })
+  if (error) throw new Error('La contraseña actual no es correcta.')
+  check(await sb.auth.updateUser({ password: next }))
+}
+
+// ---------- Configuración ----------
+export const DEFAULT_SETTINGS = { country: null, private_profile: false, notify_invites: true, notify_friends: true }
+
+/** Mi configuración del truco (privacidad, país y avisos). */
+export async function getSettings(userId) {
+  const row = check(await sb.from('truco_settings').select('*').eq('user_id', userId).maybeSingle())
+  return { ...DEFAULT_SETTINGS, ...row }
+}
+export async function saveSettings(userId, patch) {
   return check(
     await sb
-      .from('profiles')
-      .update({ first_name: clean(first_name), last_name: clean(last_name), country: country || null })
-      .eq('id', userId)
+      .from('truco_settings')
+      .upsert({ user_id: userId, ...patch, updated_at: new Date().toISOString() })
       .select()
       .single()
   )
@@ -163,6 +185,7 @@ export async function friendsData(myId) {
 
 export async function sendFriendRequest(myId, otherId) {
   check(await sb.from('friendships').insert({ requester: myId, addressee: otherId }))
+  server('friend_request', { to: otherId }).catch(() => {}) // aviso al celular (si lo tiene activado)
 }
 export async function acceptFriend(friendshipId) {
   check(await sb.from('friendships').update({ status: 'accepted' }).eq('id', friendshipId))
@@ -207,6 +230,11 @@ export const timeoutRoom = (roomId) => server('timeout', { roomId }).then((d) =>
 export const leaveRoom = (roomId) => server('leave', { roomId })
 export const backRoom = (roomId) => server('back', { roomId }).then((d) => d.view)
 
+// ---------- Notificaciones push ----------
+export const pushSubscribe = (subscription) => server('push_subscribe', { subscription })
+export const pushUnsubscribe = (endpoint) => server('push_unsubscribe', { endpoint })
+export const pushTest = () => server('push_test')
+
 /** Mesas públicas esperando gente (las de la última media hora). */
 export async function openTables() {
   const since = new Date(Date.now() - 30 * 60 * 1000).toISOString()
@@ -250,23 +278,25 @@ export function subscribeRooms(myId, cb) {
 }
 
 // ---------- Ranking ----------
-/** Ranking de varios jugadores: { [userId]: { points, mmr, games, wins, streak } } (los que no jugaron no aparecen). */
+/**
+ * Ranking y datos públicos de varios jugadores:
+ * { [userId]: { points, games, wins, streak, country, private } }.
+ * Si el perfil es privado (y no son amigos), games/wins/streak/country vienen en null.
+ */
 export async function ratingsByIds(ids) {
   if (!ids.length) return {}
-  const rows = check(await sb.from('truco_ratings').select('*').in('user_id', ids))
+  const rows = check(await sb.rpc('truco_cards', { p_ids: ids }))
   return Object.fromEntries(rows.map((r) => [r.user_id, r]))
 }
 
-/** Los mejores del ranking. */
+/** Los mejores del ranking (aparecen todos los que jugaron). */
 export async function leaderboard(limit = 50) {
-  return check(await sb.from('truco_ratings').select('*').gt('games', 0).order('points', { ascending: false }).limit(limit))
+  return check(await sb.rpc('truco_leaderboard', { lim: limit }))
 }
 
 /** Puesto en el ranking según los puntos (1 = el primero). */
 export async function rankPosition(points) {
-  const { count, error } = await sb.from('truco_ratings').select('user_id', { count: 'exact', head: true }).gt('points', points)
-  if (error) throw new Error(explain(error))
-  return (count ?? 0) + 1
+  return check(await sb.rpc('truco_rank_position', { p_points: points }))
 }
 
 /** Cuánto cambió mi ranking en una partida (null si todavía no se anotó o no rankeaba). */

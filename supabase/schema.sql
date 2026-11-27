@@ -290,3 +290,88 @@ grant execute on function public.truco_apply_ratings(uuid, jsonb) to service_rol
 
 -- Nacionalidad en el perfil (compartido con el Sudoku; opcional) ----------------
 alter table public.profiles add column if not exists country text check (country is null or country ~ '^[A-Z]{2}$');
+
+-- Configuración, privacidad y notificaciones ------------------------------------
+create table if not exists public.truco_settings (
+  user_id uuid primary key default auth.uid() references public.profiles (id) on delete cascade,
+  country text check (country is null or country ~ '^[A-Z]{2}$'),
+  private_profile boolean not null default false,   -- estadísticas y país: solo amigos
+  in_ranking boolean not null default true,         -- sin uso: todos aparecen siempre en el ranking
+  notify_invites boolean not null default true,
+  notify_friends boolean not null default true,
+  updated_at timestamptz not null default now()
+);
+alter table public.truco_settings enable row level security;
+drop policy if exists "ver mi configuracion" on public.truco_settings;
+create policy "ver mi configuracion" on public.truco_settings for select using (auth.uid() = user_id);
+drop policy if exists "crear mi configuracion" on public.truco_settings;
+create policy "crear mi configuracion" on public.truco_settings for insert with check (auth.uid() = user_id);
+drop policy if exists "cambiar mi configuracion" on public.truco_settings;
+create policy "cambiar mi configuracion" on public.truco_settings for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- Suscripciones a notificaciones push (una por celular). Solo las maneja el servidor del juego.
+create table if not exists public.truco_push_subs (
+  endpoint text primary key,
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  subscription jsonb not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists truco_push_subs_user on public.truco_push_subs (user_id);
+alter table public.truco_push_subs enable row level security;
+
+create or replace function public.truco_are_friends(a uuid, b uuid) returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from friendships f
+    where f.status = 'accepted'
+      and ((f.requester = a and f.addressee = b) or (f.requester = b and f.addressee = a))
+  );
+$$;
+
+-- Datos públicos de jugadores: puntos siempre; estadísticas y país según la privacidad.
+create or replace function public.truco_cards(p_ids uuid[])
+returns table (user_id uuid, points integer, games integer, wins integer, streak integer, country text, private boolean)
+language sql stable security definer set search_path = public as $$
+  select p.id,
+         coalesce(r.points, 0),
+         case when v.ok then coalesce(r.games, 0) end,
+         case when v.ok then coalesce(r.wins, 0) end,
+         case when v.ok then coalesce(r.streak, 0) end,
+         case when v.ok then s.country end,
+         coalesce(s.private_profile, false)
+  from unnest(p_ids) as p(id)
+  left join truco_ratings r on r.user_id = p.id
+  left join truco_settings s on s.user_id = p.id
+  cross join lateral (
+    select (p.id = auth.uid() or not coalesce(s.private_profile, false) or truco_are_friends(auth.uid(), p.id)) as ok
+  ) v;
+$$;
+
+create or replace function public.truco_leaderboard(lim integer default 50)
+returns table (user_id uuid, points integer, country text)
+language sql stable security definer set search_path = public as $$
+  select r.user_id, r.points,
+         case when not coalesce(s.private_profile, false) or r.user_id = auth.uid() or truco_are_friends(auth.uid(), r.user_id)
+              then s.country end
+  from truco_ratings r
+  left join truco_settings s on s.user_id = r.user_id
+  where r.games > 0
+  order by r.points desc
+  limit least(greatest(lim, 1), 100);
+$$;
+
+create or replace function public.truco_rank_position(p_points integer) returns integer
+language sql stable security definer set search_path = public as $$
+  select count(*)::int + 1 from truco_ratings r where r.games > 0 and r.points > p_points;
+$$;
+
+revoke execute on function public.truco_are_friends(uuid, uuid) from public, anon;
+revoke execute on function public.truco_cards(uuid[]) from public, anon;
+revoke execute on function public.truco_leaderboard(integer) from public, anon;
+revoke execute on function public.truco_rank_position(integer) from public, anon;
+grant execute on function public.truco_cards(uuid[]) to authenticated;
+grant execute on function public.truco_leaderboard(integer) to authenticated;
+grant execute on function public.truco_rank_position(integer) to authenticated;
+
+-- Las estadísticas ajenas solo se leen por las funciones de arriba
+alter policy "ver ranking" on public.truco_ratings using (auth.uid() = user_id);
