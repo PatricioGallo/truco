@@ -275,9 +275,33 @@ function Notifications({ profile, settings, onSettings }) {
 }
 
 /** Configuración completa de la cuenta. */
+const TABS = [
+  ['cuenta', '👤', 'Cuenta'],
+  ['privacidad', '🔒', 'Privacidad'],
+  ['avisos', '🔔', 'Avisos'],
+  ['app', '📲', 'App'],
+]
+const TAB_KEY = 'truco.settingsTab'
+
 export default function Settings({ profile, onProfile, onBack }) {
   const [settings, setSettings] = useState(null)
   const [error, setError] = useState('')
+  const [tab, setTabState] = useState(() => {
+    try {
+      const t = localStorage.getItem(TAB_KEY)
+      return TABS.some(([id]) => id === t) ? t : 'cuenta'
+    } catch {
+      return 'cuenta'
+    }
+  })
+  const setTab = (t) => {
+    setTabState(t)
+    try {
+      localStorage.setItem(TAB_KEY, t)
+    } catch {
+      /* sin storage */
+    }
+  }
   useEffect(() => {
     let alive = true
     api
@@ -296,28 +320,45 @@ export default function Settings({ profile, onProfile, onBack }) {
         ‹ Volver
       </button>
       <h2 className="page-title">Configuración</h2>
+      <nav className="settings-tabs" role="tablist" aria-label="Secciones de la configuración">
+        {TABS.map(([id, icon, label]) => (
+          <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
+            <span aria-hidden="true">{icon}</span>
+            {label}
+          </button>
+        ))}
+      </nav>
       {error && <p className="form-error">{error}</p>}
       {!settings ? (
         !error && <p className="muted">Cargando…</p>
       ) : (
-        <>
-          <PersonalData profile={profile} settings={settings} onProfile={onProfile} onSettings={onSettings} />
-          <Privacy profile={profile} settings={settings} onSettings={onSettings} />
-          <Notifications profile={profile} settings={settings} onSettings={onSettings} />
-          <section className="settings-block">
-            <h3>Instalar la app</h3>
-            <InstallGuide />
-          </section>
-          <Password profile={profile} />
-          <LoginEmail userId={profile.id} />
-          <section className="settings-block">
-            <h3>Cuenta</h3>
-            <p className="muted small">Es la misma cuenta que el Sudoku: la foto y el nombre se ven en los dos juegos.</p>
-            <button className="btn btn-ghost" onClick={() => api.signOut()}>
-              Cerrar sesión
-            </button>
-          </section>
-        </>
+        <div className="settings-panel" role="tabpanel" key={tab}>
+          {tab === 'cuenta' && (
+            <>
+              <PersonalData profile={profile} settings={settings} onProfile={onProfile} onSettings={onSettings} />
+              <LoginEmail userId={profile.id} />
+              <Password profile={profile} />
+              <section className="settings-block">
+                <h3>Sesión</h3>
+                <p className="muted small">Es la misma cuenta que el Sudoku: la foto y el nombre se ven en los dos juegos.</p>
+                <button className="btn btn-ghost" onClick={() => api.signOut()}>
+                  Cerrar sesión
+                </button>
+              </section>
+            </>
+          )}
+          {tab === 'privacidad' && <Privacy profile={profile} settings={settings} onSettings={onSettings} />}
+          {tab === 'avisos' && <Notifications profile={profile} settings={settings} onSettings={onSettings} />}
+          {tab === 'app' && (
+            <section className="settings-block">
+              <h3>Instalar la app</h3>
+              <p className="muted small">
+                Instalada se abre a pantalla completa con su ícono, anda sin conexión contra la compu y te llegan los avisos.
+              </p>
+              <InstallGuide />
+            </section>
+          )}
+        </div>
       )}
     </main>
   )
