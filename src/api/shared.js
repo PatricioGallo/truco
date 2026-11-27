@@ -4,6 +4,15 @@ export const USERNAME_RE = /^[a-z0-9_.]{3,20}$/
 
 export const normalizeUsername = (u) => u.trim().toLowerCase()
 
+export const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
+export const normalizeEmail = (e) => (e || '').trim().toLowerCase()
+export const looksLikeEmail = (s) => s.includes('@')
+
+export function validateEmail(email) {
+  if (email && !EMAIL_RE.test(email)) return 'Ese mail no parece válido.'
+  return null
+}
+
 export function validateSignUp({ username, password, firstName, lastName }) {
   if (!USERNAME_RE.test(username))
     return 'El usuario tiene que tener entre 3 y 20 caracteres: letras, números, punto o guion bajo.'

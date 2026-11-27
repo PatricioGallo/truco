@@ -121,3 +121,71 @@ begin
     alter publication supabase_realtime add table public.friendships;
   end if;
 end $$;
+
+-- Mail para entrar (opcional) ------------------------------------------------
+-- Las cuentas siguen siendo usuario@jugadores.sudoku-pato.app (igual que el
+-- Sudoku). El mail real se guarda aparte, solo lo ve su dueño, y sirve para
+-- entrar escribiendo el mail en vez del usuario.
+create table if not exists public.account_emails (
+  user_id uuid primary key references public.profiles (id) on delete cascade,
+  email text not null check (email = lower(trim(email)) and email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists account_emails_email on public.account_emails (email);
+
+alter table public.account_emails enable row level security;
+
+drop policy if exists "ver mi mail" on public.account_emails;
+create policy "ver mi mail" on public.account_emails
+  for select using (auth.uid() = user_id);
+
+drop policy if exists "cargar mi mail" on public.account_emails;
+create policy "cargar mi mail" on public.account_emails
+  for insert with check (auth.uid() = user_id);
+
+drop policy if exists "cambiar mi mail" on public.account_emails;
+create policy "cambiar mi mail" on public.account_emails
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "borrar mi mail" on public.account_emails;
+create policy "borrar mi mail" on public.account_emails
+  for delete using (auth.uid() = user_id);
+
+-- Para el login: de un mail devuelve el usuario (o null si no hay ninguno)
+create or replace function public.username_for_email(p_email text) returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.username
+  from account_emails e join profiles p on p.id = e.user_id
+  where e.email = lower(trim(p_email));
+$$;
+
+revoke execute on function public.username_for_email(text) from public;
+grant execute on function public.username_for_email(text) to anon, authenticated;
+
+-- Al crear la cuenta con mail, lo guarda en la misma operación
+create or replace function public.save_signup_email() returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_email text := lower(trim(new.raw_user_meta_data ->> 'contact_email'));
+begin
+  if v_email is not null and v_email <> '' then
+    insert into account_emails (user_id, email) values (new.id, v_email);
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function public.save_signup_email() from public, anon, authenticated;
+
+drop trigger if exists on_auth_user_created_email on auth.users;
+create trigger on_auth_user_created_email
+  after insert on auth.users
+  for each row execute function public.save_signup_email();

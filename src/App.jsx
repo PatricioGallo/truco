@@ -392,6 +392,7 @@ function Profile({ profile, onChange, onBack }) {
       <h2 className="page-title center">{displayName(profile)}</h2>
       <p className="muted center">@{profile.username}</p>
       {msg && <p className="muted center">{msg}</p>}
+      <LoginEmail userId={profile.id} />
       <p className="muted small center">Es la misma cuenta que el Sudoku: la foto y el nombre se ven en los dos juegos.</p>
       <button className="btn btn-ghost" onClick={() => api.signOut()}>
         Cerrar sesión
@@ -411,3 +412,59 @@ function Profile({ profile, onChange, onBack }) {
   )
 }
 
+// Mail opcional para entrar escribiéndolo en vez del usuario
+function LoginEmail({ userId }) {
+  const [saved, setSaved] = useState(null)
+  const [email, setEmail] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  useEffect(() => {
+    let alive = true
+    api
+      .getMyEmail(userId)
+      .then((e) => alive && (setSaved(e), setEmail(e)))
+      .catch(() => alive && setSaved(''))
+    return () => {
+      alive = false
+    }
+  }, [userId])
+  const submit = async (e) => {
+    e.preventDefault()
+    setBusy(true)
+    setMsg('')
+    try {
+      const value = await api.setMyEmail(userId, email)
+      setSaved(value)
+      setEmail(value)
+      setMsg(value ? 'Listo: ya podés entrar con este mail.' : 'Mail borrado.')
+    } catch (err) {
+      setMsg(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  if (saved === null) return null
+  const changed = email.trim().toLowerCase() !== saved
+  return (
+    <form className="login-form" onSubmit={submit}>
+      <label className="field">
+        <span>Mail para entrar (opcional)</span>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          autoComplete="email"
+          autoCapitalize="none"
+          spellCheck="false"
+          placeholder="tu@mail.com"
+        />
+      </label>
+      {msg && <p className="muted small center">{msg}</p>}
+      {changed && (
+        <button className="btn btn-primary" disabled={busy}>
+          {busy ? 'Guardando…' : email.trim() ? 'Guardar mail' : 'Borrar mail'}
+        </button>
+      )}
+    </form>
+  )
+}

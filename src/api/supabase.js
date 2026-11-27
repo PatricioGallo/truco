@@ -1,7 +1,14 @@
 // Backend real: Supabase. Mismo proyecto y mismas cuentas que el Sudoku.
 import { createClient, FunctionRegion } from '@supabase/supabase-js'
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config.js'
-import { normalizeUsername, validateSignUp, resizeImage } from './shared.js'
+import {
+  normalizeUsername,
+  normalizeEmail,
+  looksLikeEmail,
+  validateSignUp,
+  validateEmail,
+  resizeImage,
+} from './shared.js'
 
 export const configured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY)
 const sb = configured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null
@@ -14,6 +21,7 @@ function explain(error) {
   const msg = error?.message || ''
   if (/invalid login credentials/i.test(msg)) return 'Usuario o contraseña incorrectos.'
   if (/already registered|already exists/i.test(msg)) return 'Ese usuario ya existe. Elegí otro.'
+  if (/database error saving new user/i.test(msg)) return 'No se pudo crear la cuenta. Puede que ese mail ya esté en uso.'
   if (/password should be at least/i.test(msg)) return 'La contraseña tiene que tener al menos 6 caracteres.'
   if (/fetch|network|load failed/i.test(msg)) return 'Sin conexión. Revisá internet y probá de nuevo.'
   return msg || 'Algo salió mal. Probá de nuevo.'
@@ -32,26 +40,59 @@ export function onAuthChange(cb) {
   const { data } = sb.auth.onAuthStateChange((_e, session) => cb(session?.user ?? null))
   return () => data.subscription.unsubscribe()
 }
+// Se puede entrar con el usuario o con el mail que la persona cargó
 export async function signIn(raw, password) {
-  return check(await sb.auth.signInWithPassword({ email: toEmail(normalizeUsername(raw)), password })).user
+  let username = normalizeUsername(raw)
+  if (looksLikeEmail(username)) {
+    username = check(await sb.rpc('username_for_email', { p_email: normalizeEmail(raw) }))
+    if (!username) throw new Error('Usuario o contraseña incorrectos.')
+  }
+  return check(await sb.auth.signInWithPassword({ email: toEmail(username), password })).user
 }
-export async function signUp({ username: raw, password, firstName = '', lastName = '' }) {
+export async function signUp({ username: raw, password, firstName = '', lastName = '', email: rawEmail = '' }) {
   const username = normalizeUsername(raw)
-  const invalid = validateSignUp({ username, password, firstName, lastName })
+  const email = normalizeEmail(rawEmail)
+  const invalid = validateSignUp({ username, password, firstName, lastName }) || validateEmail(email)
   if (invalid) throw new Error(invalid)
   const taken = check(await sb.from('profiles').select('id').eq('username', username).maybeSingle())
   if (taken) throw new Error('Ese usuario ya existe. Elegí otro.')
+  if (email && check(await sb.rpc('username_for_email', { p_email: email })))
+    throw new Error('Ese mail ya está en uso en otra cuenta.')
   const data = check(
     await sb.auth.signUp({
       email: toEmail(username),
       password,
-      options: { data: { username, first_name: firstName.trim(), last_name: lastName.trim() } },
+      options: {
+        data: { username, first_name: firstName.trim(), last_name: lastName.trim(), ...(email && { contact_email: email }) },
+      },
     })
   )
   if (!data.session) throw new Error('La cuenta se creó pero falta confirmarla. Probá entrar en un rato.')
   return data.user
 }
 export const signOut = () => sb.auth.signOut()
+
+/** El mail para entrar (solo lo ve el dueño). '' si no cargó ninguno. */
+export async function getMyEmail(userId) {
+  const row = check(await sb.from('account_emails').select('email').eq('user_id', userId).maybeSingle())
+  return row?.email ?? ''
+}
+/** Guarda, cambia o (con '') borra el mail para entrar. */
+export async function setMyEmail(userId, rawEmail) {
+  const email = normalizeEmail(rawEmail)
+  const invalid = validateEmail(email)
+  if (invalid) throw new Error(invalid)
+  if (!email) {
+    check(await sb.from('account_emails').delete().eq('user_id', userId))
+    return ''
+  }
+  const { error } = await sb
+    .from('account_emails')
+    .upsert({ user_id: userId, email, updated_at: new Date().toISOString() })
+  if (error?.code === '23505') throw new Error('Ese mail ya está en uso en otra cuenta.')
+  if (error) throw new Error(explain(error))
+  return email
+}
 
 export async function getProfile(id) {
   return check(await sb.from('profiles').select('*').eq('id', id).single())

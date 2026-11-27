@@ -4,7 +4,7 @@ import Card from './Card.jsx'
 
 export default function Login() {
   const [mode, setMode] = useState('login')
-  const [form, setForm] = useState({ username: '', password: '', firstName: '', lastName: '' })
+  const [form, setForm] = useState({ username: '', password: '', firstName: '', lastName: '', email: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
@@ -44,7 +44,7 @@ export default function Login() {
           </button>
         </div>
         <label className="field">
-          <span>Usuario</span>
+          <span>{signup ? 'Usuario' : 'Usuario o mail'}</span>
           <input
             value={form.username}
             onChange={set('username')}
@@ -66,6 +66,19 @@ export default function Login() {
               <input value={form.lastName} onChange={set('lastName')} autoComplete="family-name" maxLength={40} />
             </label>
           </div>
+        )}
+        {signup && (
+          <label className="field">
+            <span>Mail (opcional, para entrar con él)</span>
+            <input
+              type="email"
+              value={form.email}
+              onChange={set('email')}
+              autoComplete="email"
+              autoCapitalize="none"
+              spellCheck="false"
+            />
+          </label>
         )}
         <label className="field">
           <span>Contraseña</span>

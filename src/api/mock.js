@@ -1,7 +1,7 @@
 // Backend simulado para probar sin Supabase: `npm run dev:mock`.
 // Todo vive en localStorage; la sesión es por pestaña (sessionStorage), así se
 // pueden abrir dos pestañas con dos usuarios y jugar entre ellos.
-import { normalizeUsername, validateSignUp, resizeImage } from './shared.js'
+import { normalizeUsername, normalizeEmail, looksLikeEmail, validateSignUp, validateEmail, resizeImage } from './shared.js'
 import * as rooms from '../server/rooms.js'
 
 export const configured = true
@@ -43,22 +43,24 @@ const emitAuth = (u) => authListeners.forEach((cb) => cb(u))
 
 export async function signIn(raw, password) {
   await net()
-  const username = normalizeUsername(raw)
-  const u = Object.values(db().users).find((x) => x.username === username)
+  const ident = normalizeUsername(raw)
+  const u = Object.values(db().users).find((x) => (looksLikeEmail(ident) ? x.email === ident : x.username === ident))
   if (!u || u.password !== password) throw new Error('Usuario o contraseña incorrectos.')
   sessionStorage.setItem(SESSION, u.id)
   emitAuth({ id: u.id })
   return { id: u.id }
 }
-export async function signUp({ username: raw, password, firstName = '', lastName = '' }) {
+export async function signUp({ username: raw, password, firstName = '', lastName = '', email: rawEmail = '' }) {
   await net()
   const username = normalizeUsername(raw)
-  const invalid = validateSignUp({ username, password, firstName, lastName })
+  const email = normalizeEmail(rawEmail)
+  const invalid = validateSignUp({ username, password, firstName, lastName }) || validateEmail(email)
   if (invalid) throw new Error(invalid)
   const d = db()
   if (Object.values(d.users).some((x) => x.username === username)) throw new Error('Ese usuario ya existe. Elegí otro.')
+  if (email && Object.values(d.users).some((x) => x.email === email)) throw new Error('Ese mail ya está en uso en otra cuenta.')
   const id = crypto.randomUUID()
-  d.users[id] = { id, username, password }
+  d.users[id] = { id, username, password, email: email || null }
   d.profiles[id] = { id, username, first_name: firstName.trim() || null, last_name: lastName.trim() || null, avatar_url: null }
   save(d)
   sessionStorage.setItem(SESSION, id)
@@ -68,6 +70,22 @@ export async function signUp({ username: raw, password, firstName = '', lastName
 export async function signOut() {
   sessionStorage.removeItem(SESSION)
   emitAuth(null)
+}
+export async function getMyEmail(id) {
+  await net()
+  return db().users[id]?.email || ''
+}
+export async function setMyEmail(id, rawEmail) {
+  await net()
+  const email = normalizeEmail(rawEmail)
+  const invalid = validateEmail(email)
+  if (invalid) throw new Error(invalid)
+  const d = db()
+  if (email && Object.values(d.users).some((x) => x.id !== id && x.email === email))
+    throw new Error('Ese mail ya está en uso en otra cuenta.')
+  d.users[id].email = email || null
+  save(d)
+  return email
 }
 export async function getProfile(id) {
   await net()
