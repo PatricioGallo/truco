@@ -9,6 +9,7 @@ import Friends from './components/Friends.jsx'
 import NewOnline from './components/NewOnline.jsx'
 import OnlineRoom from './components/OnlineRoom.jsx'
 import Avatar from './components/Avatar.jsx'
+import Icon from './components/Icon.jsx'
 import CpuSetup from './components/CpuSetup.jsx'
 import OnlineHome from './components/OnlineHome.jsx'
 import { RankingScreen, LevelPanel, HomeRanking } from './components/Ranking.jsx'
@@ -361,7 +362,9 @@ function Home({ profile, friends, rooms, local, onCpu, onOnline, onRanking, onOp
 
       <nav className="categories">
         <button className="category" onClick={onCpu}>
-          <span className="category-icon" aria-hidden="true">🤖</span>
+          <span className="category-icon" aria-hidden="true">
+            <Icon name="robot" size={32} strokeWidth={1.6} />
+          </span>
           <span className="category-text">
             <span className="mode-title">Contra la máquina</span>
             <span className="mode-sub">
@@ -373,7 +376,9 @@ function Home({ profile, friends, rooms, local, onCpu, onOnline, onRanking, onOp
           <span className="category-arrow" aria-hidden="true">›</span>
         </button>
         <button className="category category-online" onClick={onOnline}>
-          <span className="category-icon" aria-hidden="true">🌐</span>
+          <span className="category-icon" aria-hidden="true">
+            <Icon name="globe" size={32} strokeWidth={1.6} />
+          </span>
           <span className="category-text">
             <span className="mode-title">
               Online
@@ -384,7 +389,9 @@ function Home({ profile, friends, rooms, local, onCpu, onOnline, onRanking, onOp
           <span className="category-arrow" aria-hidden="true">›</span>
         </button>
         <button className="category category-ranked" disabled>
-          <span className="category-icon" aria-hidden="true">🏆</span>
+          <span className="category-icon" aria-hidden="true">
+            <Icon name="trophy" size={32} strokeWidth={1.6} />
+          </span>
           <span className="category-text">
             <span className="mode-title">Competitivo</span>
             <span className="mode-sub">Mano a mano con gente de tu nivel</span>
@@ -422,7 +429,7 @@ function Profile({ profile, onChange, onBack, onRanking, onSettings }) {
       </button>
       <label className="photo-btn">
         <Avatar profile={profile} size={112} />
-        <span className="photo-badge">{busy ? '…' : '📷'}</span>
+        <span className="photo-badge">{busy ? '…' : <Icon name="camera" size={22} strokeWidth={2} />}</span>
         <input type="file" accept="image/*" hidden onChange={onPhoto} />
       </label>
       <PlayerHeader profile={profile} country={stats?.country} hideAvatar />
@@ -430,7 +437,7 @@ function Profile({ profile, onChange, onBack, onRanking, onSettings }) {
       <LevelPanel rating={stats} onOpenRanking={onRanking} />
       <StatsGrid stats={stats} />
       <button className="btn btn-ghost" onClick={onSettings}>
-        ⚙️ Configuración: datos, contraseña, privacidad y avisos
+        <Icon name="gear" size={20} /> Configuración: datos, contraseña, privacidad y avisos
       </button>
       <p className="credits">
         Naipes: dibujos de{' '}

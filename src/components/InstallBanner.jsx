@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import Icon from './Icon.jsx'
 import { platform, isStandalone, isIosSafari, canPromptInstall, onInstallAvailable, promptInstall } from '../pwa.js'
 
 const DISMISS_KEY = 'truco.installDismissedAt'
@@ -63,7 +64,9 @@ export function InstallGuide() {
   const [os, setOs] = useState(mine === 'ios' ? 'ios' : 'android')
   const [canInstall, setCanInstall] = useState(canPromptInstall())
   useEffect(() => onInstallAvailable(setCanInstall), [])
-  if (isStandalone()) return <p className="muted small">Ya estás usando la app instalada. 👌</p>
+  if (isStandalone()) return <p className="muted small installed-ok">
+        <Icon name="check" size={16} strokeWidth={2.4} /> Ya estás usando la app instalada.
+      </p>
   return (
     <div className="install-guide">
       {canInstall && (

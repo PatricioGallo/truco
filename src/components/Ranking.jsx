@@ -4,6 +4,7 @@ import { levelOf, LEVEL_CARDS, LEVEL_MIN } from '../server/ranking.js'
 import { displayName } from '../api/shared.js'
 import Card from './Card.jsx'
 import Avatar from './Avatar.jsx'
+import Icon, { Medal } from './Icon.jsx'
 import { flagOf } from '../countries.js'
 
 /** Carta de nivel chiquita con el nombre (para listas y mesas). */
@@ -49,7 +50,9 @@ export function LevelPanel({ rating, onOpenRanking }) {
         <b className="level-name">{lv.card.name}</b>
         <span className="level-points">
           {rating.points} puntos
-          {rating.pos ? <span className="world-chip">🌎 Ranking #{rating.pos}</span> : null}
+          {rating.pos ? <span className="world-chip">
+              <Icon name="globe" size={14} strokeWidth={2.2} /> Ranking #{rating.pos}
+            </span> : null}
         </span>
         {lv.next !== null ? (
           <>
@@ -65,11 +68,20 @@ export function LevelPanel({ rating, onOpenRanking }) {
         )}
         <span className="muted small">
           {rating.games === null
-            ? '🔒 Perfil privado'
+            ? (
+              <>
+                <Icon name="lock" size={14} strokeWidth={2.2} /> Perfil privado
+              </>
+            )
             : rating.games
               ? `${rating.wins} ganadas de ${rating.games}`
               : 'Jugá mesas públicas para sumar puntos y subir de nivel'}
-          {rating.streak >= 3 ? ` · racha de ${rating.streak} 🔥` : ''}
+          {rating.streak >= 3 && (
+            <span className="streak">
+              {' '}
+              · racha de {rating.streak} <Icon name="flame" size={14} strokeWidth={2} />
+            </span>
+          )}
         </span>
       </div>
       {onOpenRanking && (
@@ -150,7 +162,7 @@ export function RankingScreen({ profile, onBack, onOpenPlayer }) {
           {rows.map((r, i) => (
             <li key={r.user_id} className={r.user_id === profile.id ? 'is-me' : ''}>
               <button className="rank-row" onClick={() => onOpenPlayer?.(r.user_id)}>
-                <span className="rank-pos">{i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}</span>
+                <span className="rank-pos">{i < 3 ? <Medal place={i + 1} /> : i + 1}</span>
                 <Avatar profile={people[r.user_id] ?? { username: '?' }} size={36} />
                 <span className="person-text">
                   <b>
@@ -272,7 +284,9 @@ export function HomeRanking({ profile, refresh, onOpen, onOpenPlayer }) {
           <b>{me?.pos ? `#${me.pos}` : '—'}</b>
         </span>
       </button>
-      <h2 className="home-rank-title">🌎 Ranking</h2>
+      <h2 className="home-rank-title">
+        <Icon name="globe" size={20} strokeWidth={2} /> Ranking
+      </h2>
       {top === null ? (
         <p className="muted small">Cargando…</p>
       ) : top.length === 0 ? (
@@ -282,7 +296,7 @@ export function HomeRanking({ profile, refresh, onOpen, onOpenPlayer }) {
           {top.map((r, i) => (
             <li key={r.user_id} className={r.user_id === profile.id ? 'is-me' : ''}>
               <button className="rank-row" onClick={() => onOpenPlayer(r.user_id)}>
-                <span className="rank-pos">{i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}</span>
+                <span className="rank-pos">{i < 3 ? <Medal place={i + 1} /> : i + 1}</span>
                 <Avatar profile={people[r.user_id] ?? { username: '?' }} size={32} />
                 <span className="person-text">
                   <b>

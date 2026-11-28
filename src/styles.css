@@ -1015,3 +1015,24 @@ html { background: var(--wood-2); }
 .settings-tabs button span { font-size: 1.2rem; line-height: 1; }
 .settings-tabs button[aria-selected='true'] { background: var(--cream); color: var(--ink); }
 .settings-panel { display: flex; flex-direction: column; gap: 14px; animation: dialog-in-plain 0.2s ease both; }
+
+/* Íconos propios (en lugar de emojis) */
+.icon { display: inline-block; flex: none; vertical-align: -0.18em; }
+.category-icon { color: var(--brass-2); background: radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.08), rgb(0 0 0 / 0.3)); }
+.category-icon .icon { vertical-align: 0; filter: drop-shadow(0 1px 0 rgb(0 0 0 / 0.5)); }
+.category-online .category-icon { color: var(--cream); }
+.category-ranked .category-icon { color: var(--gold); }
+.photo-badge { color: var(--ink); }
+.settings-tabs button .icon { vertical-align: 0; }
+.settings-tabs button[aria-selected='true'] .icon { color: var(--red); }
+.search-icon { display: grid; place-items: center; font-size: 1rem; }
+.search-icon .icon { vertical-align: 0; }
+.home-rank-title { display: flex; align-items: center; gap: 8px; }
+.home-rank-title .icon { vertical-align: 0; }
+.world-chip { display: inline-flex; align-items: center; gap: 5px; }
+.world-chip .icon { vertical-align: 0; color: var(--brass-2); }
+.streak .icon { color: #ff8a3d; }
+.medal { display: block; margin: 0 auto; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.45)); }
+.rank-pos { display: grid; place-items: center; }
+.btn .icon { vertical-align: -0.2em; margin-right: 4px; }
+.installed-ok .icon { color: var(--green); }

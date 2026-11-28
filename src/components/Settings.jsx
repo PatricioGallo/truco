@@ -3,6 +3,7 @@ import * as api from '@api'
 import { COUNTRIES, flagOf } from '../countries.js'
 import { pushStatus, enablePush, disablePush, platform } from '../pwa.js'
 import { InstallGuide } from './InstallBanner.jsx'
+import Icon from './Icon.jsx'
 
 /** Interruptor con título y explicación. */
 function Switch({ label, hint, checked, disabled, onChange }) {
@@ -276,10 +277,10 @@ function Notifications({ profile, settings, onSettings }) {
 
 /** Configuración completa de la cuenta. */
 const TABS = [
-  ['cuenta', '👤', 'Cuenta'],
-  ['privacidad', '🔒', 'Privacidad'],
-  ['avisos', '🔔', 'Avisos'],
-  ['app', '📲', 'App'],
+  ['cuenta', 'user', 'Cuenta'],
+  ['privacidad', 'lock', 'Privacidad'],
+  ['avisos', 'bell', 'Avisos'],
+  ['app', 'install', 'App'],
 ]
 const TAB_KEY = 'truco.settingsTab'
 
@@ -323,7 +324,7 @@ export default function Settings({ profile, onProfile, onBack }) {
       <nav className="settings-tabs" role="tablist" aria-label="Secciones de la configuración">
         {TABS.map(([id, icon, label]) => (
           <button key={id} role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
-            <span aria-hidden="true">{icon}</span>
+            <Icon name={icon} size={22} strokeWidth={1.9} />
             {label}
           </button>
         ))}

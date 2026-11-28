@@ -3,6 +3,7 @@ import * as api from '@api'
 import { displayName } from '../api/shared.js'
 import { flagOf, countryName } from '../countries.js'
 import Avatar from './Avatar.jsx'
+import Icon from './Icon.jsx'
 import { LevelPanel } from './Ranking.jsx'
 
 const EMPTY = { points: 0, games: 0, wins: 0, streak: 0 }
@@ -34,7 +35,9 @@ export function StatsGrid({ stats }) {
   if (stats.games === null)
     return (
       <section className="stats-grid is-private">
-        <p className="muted center">🔒 Perfil privado: sus estadísticas solo las ven sus amigos.</p>
+        <p className="muted center">
+          <Icon name="lock" size={16} strokeWidth={2.2} /> Perfil privado: sus estadísticas solo las ven sus amigos.
+        </p>
       </section>
     )
   const lost = stats.games - stats.wins

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import * as api from '@api'
 import { displayName } from '../api/shared.js'
 import Avatar from './Avatar.jsx'
+import Icon from './Icon.jsx'
 
 /** Buscador de jugadores, pedidos de amistad y lista de amigos. */
 export default function Friends({ profile, data, reload, onPlayWith, onOpenPlayer, onBack }) {
@@ -52,7 +53,9 @@ export default function Friends({ profile, data, reload, onPlayWith, onOpenPlaye
       <h2 className="page-title">Amigos</h2>
 
       <label className="search">
-        <span className="search-icon" aria-hidden="true">⌕</span>
+        <span className="search-icon" aria-hidden="true">
+          <Icon name="search" size={20} strokeWidth={2} />
+        </span>
         <input
           type="search"
           placeholder="Buscar por usuario o nombre"
